@@ -1,26 +1,88 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #111827;
+  --surface: #ffffff;
+  --muted: #6b7280;
+  --border: #e2e8f0;
+  --primary: #2563eb;
+  --primary-foreground: #f8fafc;
+  --success: #16a34a;
+  --success-foreground: #f0fdf4;
+  --warning: #f59e0b;
+  --warning-foreground: #fdf6ec;
+  --destructive: #dc2626;
+  --radius-xl: 24px;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-destructive: var(--destructive);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --radius-xl: var(--radius-xl);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #020617;
+    --foreground: #f8fafc;
+    --surface: #0f172a;
+    --muted: #cbd5f5;
+    --border: #1e293b;
+    --primary: #5579ff;
+    --primary-foreground: #e2e8f0;
+    --success: #4ade80;
+    --success-foreground: #0f172a;
+    --warning: #fbbc05;
+    --warning-foreground: #172554;
+    --destructive: #f87171;
   }
 }
 
+html,
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    var(--font-geist-sans),
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+body {
+  min-height: 100vh;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.shadow-card {
+  box-shadow: 0 10px 30px -15px rgba(15, 23, 42, 0.25);
 }

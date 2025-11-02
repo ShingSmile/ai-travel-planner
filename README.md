@@ -46,3 +46,11 @@ AI 旅行规划师旨在快速生成个性化行程、预算及语音辅助功�
 - ✅ 使用 Next.js 16 + TypeScript 构建基础框架，启用 App Router 与 `src` 目录结构。
 - ✅ 集成 ESLint（含 Prettier 规则）与 Tailwind CSS，保证代码与样式基线一致。
 - ✅ 配置 Prettier、lint-staged 与 Husky，在提交前执行格式化与静态检查。
+- ✅ 完成通用 UI 基线（按钮、输入框、加载指示、Toast），搭建品牌主题色与全局布局。
+
+## 通用组件预览
+
+- `src/components/ui/button.tsx`：支持 `primary`、`secondary`、`ghost` 三种主题与多尺寸。
+- `src/components/ui/input.tsx`：内置标签、描述与错误提示，适配后续表单场景。
+- `src/components/ui/spinner.tsx`：轻量加载指示器，可复用在按钮与页面状态中。
+- `src/components/ui/toast.tsx`：提供全局提示上下文，支持信息、成功、警告、错误四种状态。

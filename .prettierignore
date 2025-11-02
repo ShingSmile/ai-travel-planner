@@ -6,3 +6,4 @@ coverage
 build
 out
 .husky/_/
+docs
