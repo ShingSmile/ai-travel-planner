@@ -73,7 +73,8 @@
 3. 集成 Tailwind CSS：`npx tailwindcss init -p`
 4. 创建 `.env.local`，包含：
    - `SUPABASE_URL`、`SUPABASE_ANON_KEY`
-   - `LLM_API_KEY`（阿里云百炼）、`IFLYTEK_APP_ID/KEY` 等
+   - `BAILIAN_API_KEY`（阿里云百炼），可选 `BAILIAN_API_BASE_URL`、`BAILIAN_MODEL`
+   - `IFLYTEK_APP_ID/KEY` 等
 5. 初始化 Supabase 项目：定义表结构、行级安全策略（RLS）
 6. 建立 GitHub 仓库并推送初始代码，准备 README
 
@@ -330,6 +331,8 @@
 
 ## 22. 代理执行任务清单（顺序完成）
 
+> **执行进度提醒**：任务 1-8 已完成（最新完成任务 8：LLM 集成基础），下一步将进入任务 9。
+
 1. **需求确认与环境检查**
    - 阅读实现指南，列出所有外部服务账号需求。
    - 在 README 起草环境变量与密钥清单草稿。
@@ -351,7 +354,7 @@
 7. **行程创建表单**
    - 完成新建行程表单 UX（目的地、日期、预算、偏好）。
    - 支持保存为草稿并展示在仪表盘。
-8. **LLM 集成基础**
+8. ✅ **LLM 集成基础**（已完成：引入百炼 SDK 封装、Prompt 模板与 JSON Schema 重试验证）
    - 接入首选 LLM（默认阿里云百炼），编写 Prompt 模板与 SDK 封装。
    - 创建 JSON Schema 验证器与重试机制（失败回滚草稿）。
 9. **行程生成流程联通**
