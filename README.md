@@ -51,6 +51,7 @@ AI 旅行规划师旨在快速生成个性化行程、预算及语音辅助功�
 - ✅ 完成通用 UI 基线（按钮、输入框、加载指示、Toast），搭建品牌主题色与全局布局。
 - ✅ 集成 Supabase Auth，提供登录、注册、重置密码的前端流程。
 - ✅ 输出 Supabase 数据库 Schema、视图与 RLS 策略，生成 TypeScript 类型定义。
+- ✅ 搭建 `/api/trips` 基础接口，统一 API 响应与错误格式。
 
 ## 通用组件预览
 
@@ -79,3 +80,17 @@ supabase db push --file supabase/migrations/20241102_init_schema.sql
 ```
 
 > 如未使用 Supabase CLI，可在控制台 SQL Editor 中直接运行上述脚本。
+
+## API 设计进展
+
+- 公共封装：`src/lib/api-response.ts` 统一 `success/fail` 返回结构，`handleApiError` 捕获异常。
+- 认证辅助：`src/lib/auth-helpers.ts` 基于请求头的 `Authorization: Bearer <token>` 校验 Supabase 会话，并返回具有 RLS 能力的客户端。
+- 行程接口：`GET /api/trips` 支持状态筛选与分页限制；`POST /api/trips` 校验行程字段后写入数据库。
+- 请求示例：
+
+```bash
+curl -X GET http://localhost:3000/api/trips \
+  -H "Authorization: Bearer <SupabaseAccessToken>"
+```
+
+> 注意：服务端需要配置 `SUPABASE_SERVICE_ROLE_KEY`、`NEXT_PUBLIC_SUPABASE_URL` 与 `NEXT_PUBLIC_SUPABASE_ANON_KEY`，前端请求时需附带当前用户的访问令牌。
