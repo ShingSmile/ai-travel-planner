@@ -50,6 +50,7 @@ AI 旅行规划师旨在快速生成个性化行程、预算及语音辅助功�
 - ✅ 配置 Prettier、lint-staged 与 Husky，在提交前执行格式化与静态检查。
 - ✅ 完成通用 UI 基线（按钮、输入框、加载指示、Toast），搭建品牌主题色与全局布局。
 - ✅ 集成 Supabase Auth，提供登录、注册、重置密码的前端流程。
+- ✅ 输出 Supabase 数据库 Schema、视图与 RLS 策略，生成 TypeScript 类型定义。
 
 ## 通用组件预览
 
@@ -63,3 +64,18 @@ AI 旅行规划师旨在快速生成个性化行程、预算及语音辅助功�
 - `/login`：邮箱 + 密码登录表单，成功后跳转首页。
 - `/register`：新用户注册，支持邮箱验证跳转。
 - `/forgot-password`：发送密码重置邮件。
+
+## 数据库结构与迁移
+
+- SQL 脚本：`supabase/migrations/20241102_init_schema.sql`
+  - 覆盖 `user_profiles`, `trips`, `trip_days`, `activities`, `expenses`, `voice_inputs`, `sync_logs` 等表。
+  - 包含 `trip_expense_summary` 视图、更新时间触发器以及 `handle_new_user` 自动建档函数。
+  - 已配置行级安全（RLS），确保仅行程拥有者访问相关数据。
+- TypeScript 类型：`src/types/database.ts` 对应 Supabase schema，可与 `@supabase/supabase-js` 泛型结合使用。
+- 本地执行迁移示例：
+
+```bash
+supabase db push --file supabase/migrations/20241102_init_schema.sql
+```
+
+> 如未使用 Supabase CLI，可在控制台 SQL Editor 中直接运行上述脚本。
