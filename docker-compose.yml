@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  web:
+    build:
+      context: .
+    image: ai-travel-planner:web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.docker
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - supabase
+
+  supabase:
+    image: supabase/postgres:15.1.1.79
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: supabase
+      POSTGRES_DB: postgres
+      POSTGRES_PORT: 5432
+    ports:
+      - "54322:5432"
+    volumes:
+      - supabase-data:/var/lib/postgresql/data
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+
+volumes:
+  supabase-data:

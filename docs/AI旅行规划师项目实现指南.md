@@ -398,7 +398,7 @@
 21. ✅ **性能与安全加固**（已完成：为 LLM/语音接口新增速率限制、启用全局 API 中间件限流与安全响应头，并在生产环境隐藏敏感错误详情）
     - 引入速率限制（LLM/语音 API），审查敏感日志。
     - 开启 CSP、安全头、中间件限流。
-22. **Docker 化**
+22. ✅ **Docker 化**（已完成：新增多阶段 Dockerfile、提供 `docker-compose.yml` 与示例环境变量文件，支持本地一键启动 Web 与 Supabase/Postgres 环境）
     - 编写多阶段 Dockerfile，支持生产构建。
     - 编写 `docker-compose.yml`（含 Supabase/代理服务）供本地/助教运行。
 23. **CI/CD 完善**

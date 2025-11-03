@@ -1,0 +1,14 @@
+.next
+node_modules
+npm-debug.log
+yarn-error.log
+.git
+.gitignore
+.husky
+.env.local
+.env.*
+supabase/.temp
+tests
+playwright-report
+coverage
+tmp
