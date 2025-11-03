@@ -12,9 +12,12 @@ const paramsSchema = z.object({
   tripId: z.string().uuid(),
 });
 
-export async function GET(_request: NextRequest, context: { params: { tripId: string } }) {
+type TripRouteContext = { params: Promise<{ tripId: string }> };
+
+export async function GET(_request: NextRequest, context: TripRouteContext) {
   try {
-    const parsedParams = paramsSchema.safeParse(context.params);
+    const params = await context.params;
+    const parsedParams = paramsSchema.safeParse(params);
     if (!parsedParams.success) {
       throw new ApiErrorResponse(
         "无效的行程 ID。",
