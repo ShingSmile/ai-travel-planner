@@ -26,9 +26,12 @@ const updateSchema = z
     }
   );
 
-export async function PATCH(request: NextRequest, context: { params: { activityId: string } }) {
+type ActivityRouteContext = { params: Promise<{ activityId: string }> };
+
+export async function PATCH(request: NextRequest, context: ActivityRouteContext) {
   try {
-    const parsedParams = paramsSchema.safeParse(context.params);
+    const params = await context.params;
+    const parsedParams = paramsSchema.safeParse(params);
     if (!parsedParams.success) {
       throw new ApiErrorResponse(
         "无效的活动 ID。",
@@ -89,9 +92,10 @@ export async function PATCH(request: NextRequest, context: { params: { activityI
   }
 }
 
-export async function DELETE(_request: NextRequest, context: { params: { activityId: string } }) {
+export async function DELETE(_request: NextRequest, context: ActivityRouteContext) {
   try {
-    const parsedParams = paramsSchema.safeParse(context.params);
+    const params = await context.params;
+    const parsedParams = paramsSchema.safeParse(params);
     if (!parsedParams.success) {
       throw new ApiErrorResponse(
         "无效的活动 ID。",
