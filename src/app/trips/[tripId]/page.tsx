@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { cn } from "@/lib/utils";
+import { TripMap } from "@/components/trip/trip-map";
 
 type TripDetail = {
   id: string;
@@ -85,6 +86,7 @@ const activityTypeLabel: Record<string, string> = {
   dining: "餐饮",
   hotel: "住宿",
   shopping: "购物",
+  accommodation: "住宿",
 };
 
 export default function TripDetailPage({ params }: { params: { tripId: string } }) {
@@ -99,6 +101,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [activityDrafts, setActivityDrafts] = useState<Record<string, ActivityDraft>>({});
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -150,6 +153,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
   useEffect(() => {
     if (!trip) {
       setActivityDrafts({});
+      setSelectedActivityId(null);
       return;
     }
 
@@ -164,6 +168,21 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
         });
       });
       return next;
+    });
+
+    setSelectedActivityId((current) => {
+      if (
+        current &&
+        trip.days.some((day) => day.activities.some((activity) => activity.id === current))
+      ) {
+        return current;
+      }
+      const firstActivityWithLocation = trip.days
+        .flatMap((day) => day.activities)
+        .find((activity) =>
+          Boolean(activity.location || extractCoordinatesFromDetails(activity.details))
+        );
+      return firstActivityWithLocation?.id ?? null;
     });
   }, [trip]);
 
@@ -495,6 +514,18 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
       </header>
 
       <section className="space-y-6">
+        <div className="space-y-4">
+          <header className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-foreground">行程地图</h2>
+            <p className="text-xs text-muted">点击地图或活动卡片可高亮对应点位。</p>
+          </header>
+          <TripMap
+            days={trip.days}
+            selectedActivityId={selectedActivityId}
+            onActivitySelect={setSelectedActivityId}
+          />
+        </div>
+
         {trip.days.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-border bg-surface p-8 text-center text-sm text-muted">
             尚未生成每日行程内容，可前往生成页面重新尝试。
@@ -534,11 +565,19 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
                       draft.startTime !== baselineStart ||
                       draft.endTime !== baselineEnd ||
                       draft.note !== baselineNote;
+                    const isSelected = selectedActivityId === activity.id;
 
                     return (
                       <div
                         key={activity.id}
-                        className="space-y-4 rounded-2xl border border-border bg-background/40 p-5 shadow-card"
+                        className={cn(
+                          "space-y-4 rounded-2xl border border-border bg-background/40 p-5 shadow-card outline-none transition hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 focus-visible:border-primary focus-visible:shadow-lg focus-visible:shadow-primary/20",
+                          isSelected && "border-primary/70 shadow-lg shadow-primary/20"
+                        )}
+                        tabIndex={0}
+                        onMouseEnter={() => setSelectedActivityId(activity.id)}
+                        onMouseDown={() => setSelectedActivityId(activity.id)}
+                        onFocus={() => setSelectedActivityId(activity.id)}
                       >
                         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                           <div className="space-y-1">
@@ -748,4 +787,43 @@ function toIsoString(local: string) {
   } catch {
     return null;
   }
+}
+
+function extractCoordinatesFromDetails(details: Record<string, unknown> | null) {
+  if (!details || typeof details !== "object") return null;
+  const source = details as Record<string, unknown>;
+  const lat = pickNumber(source, ["latitude", "lat", "latituide", "geoLat"]);
+  const lng = pickNumber(source, ["longitude", "lng", "longtitude", "geoLng"]);
+  if (typeof lat === "number" && typeof lng === "number") {
+    return { lat, lng };
+  }
+  const coordinates = source.coordinates;
+  if (Array.isArray(coordinates) && coordinates.length === 2) {
+    const [lngValue, latValue] = coordinates;
+    if (
+      typeof latValue === "number" &&
+      typeof lngValue === "number" &&
+      Math.abs(latValue) <= 90 &&
+      Math.abs(lngValue) <= 180
+    ) {
+      return { lat: latValue, lng: lngValue };
+    }
+  }
+  return null;
+}
+
+function pickNumber(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number.parseFloat(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return null;
 }

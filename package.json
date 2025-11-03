@@ -13,6 +13,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@amap/amap-jsapi-loader": "^1.0.1",
     "@supabase/supabase-js": "^2.78.0",
     "ajv": "^8.17.1",
     "next": "16.0.1",
@@ -21,6 +22,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@amap/amap-jsapi-types": "^0.0.15",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
