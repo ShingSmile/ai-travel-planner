@@ -333,7 +333,7 @@
 
 ## 22. 代理执行任务清单（顺序完成）
 
-> **执行进度提醒**：任务 1-20 已完成（最新完成任务 20：端到端测试），下一步将进入任务 21。
+> **执行进度提醒**：任务 1-23 已完成（最新完成任务 23：CI/CD 完善），下一步将进入任务 24。
 
 1. **需求确认与环境检查**
    - 阅读实现指南，列出所有外部服务账号需求。
@@ -401,9 +401,10 @@
 22. ✅ **Docker 化**（已完成：新增多阶段 Dockerfile、提供 `docker-compose.yml` 与示例环境变量文件，支持本地一键启动 Web 与 Supabase/Postgres 环境）
     - 编写多阶段 Dockerfile，支持生产构建。
     - 编写 `docker-compose.yml`（含 Supabase/代理服务）供本地/助教运行。
-23. **CI/CD 完善**
-    - GitHub Actions：lint、test、build、镜像推送到 Registry。
-    - 设置版本号策略与发布标签。
+23. ✅ **CI/CD 完善**（已完成：新增 `.github/workflows/ci.yml`，串联 lint/test/build，并在推送 `main` 时构建并推送 Docker 镜像；确立语义化版本与标签规范）
+    - GitHub Actions：`quality-checks` 负责 `npm ci`、`npm run lint`、`npm run test:e2e` 与 `npm run build`，失败即阻断后续流程。
+    - Docker 发布：`docker` 任务仅在推送 `main` 分支时运行，使用 Buildx 推送至 GHCR（`ghcr.io/<仓库>:latest` 与 `:v<package.version>`）。
+    - 版本策略：沿用语义化版本（SemVer），发布前使用 `npm version [patch|minor|major]` 同步 `package.json`，并在仓库创建匹配的 `vX.Y.Z` 标签。
 24. **文档与示例数据**
     - 完成 README、API Key 说明、运行步骤、示例 `.env.example`。
     - 准备至少一个示例行程 JSON/截图用于 README 与 PDF。
