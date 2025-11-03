@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import { VoiceRecorder } from "@/components/voice/voice-recorder";
 
 type TravelerDraft = {
   name: string;
@@ -311,6 +312,20 @@ export default function PlannerNewPage() {
               </div>
             </div>
           </div>
+
+          <VoiceRecorder
+            sessionToken={sessionToken}
+            meta={{ purpose: "trip_notes" }}
+            onRecognized={(payload) => {
+              if (!payload?.transcript) return;
+              setNotes((previous) => {
+                if (!previous?.trim()) {
+                  return payload.transcript;
+                }
+                return `${previous.trim()}\n${payload.transcript}`;
+              });
+            }}
+          />
 
           <TextArea
             label="补充说明"

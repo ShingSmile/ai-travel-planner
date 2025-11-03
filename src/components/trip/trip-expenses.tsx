@@ -6,6 +6,7 @@ import { TextArea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
+import { VoiceRecorder } from "@/components/voice/voice-recorder";
 
 type ExpenseItem = {
   id: string;
@@ -238,6 +239,29 @@ export function TripExpensesPanel({
           <ExpenseTable expenses={filteredExpenses} currency={currency} />
         </>
       )}
+
+      <VoiceRecorder
+        sessionToken={sessionToken}
+        meta={{ purpose: "expense", tripId }}
+        onRecognized={(payload) => {
+          setForm((prev) => ({
+            category: payload.expenseDraft?.category ?? prev.category,
+            amount:
+              payload.expenseDraft?.amount !== undefined
+                ? String(payload.expenseDraft.amount)
+                : prev.amount,
+            currency: payload.expenseDraft?.currency ?? prev.currency,
+            source: payload.expenseDraft?.source ?? prev.source,
+            memo:
+              payload.expenseDraft?.memo ??
+              (payload.transcript
+                ? prev.memo
+                  ? `${prev.memo}\n${payload.transcript}`
+                  : payload.transcript
+                : prev.memo),
+          }));
+        }}
+      />
 
       <form
         className="space-y-4 rounded-2xl border border-border/80 bg-background/40 p-5"
