@@ -11,6 +11,7 @@ import { getSupabaseClient } from "@/lib/supabase-client";
 import { cn } from "@/lib/utils";
 import { TripMap } from "@/components/trip/trip-map";
 import { TripBudgetSummary, type NormalizedBudget } from "@/components/trip/trip-budget";
+import { TripExpensesPanel } from "@/components/trip/trip-expenses";
 
 type TripDetail = {
   id: string;
@@ -113,6 +114,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
     () => parseBudgetAmount(trip?.budget ?? null),
     [trip?.budget]
   );
+  const currencyFallback = budgetSummary?.currency ?? "CNY";
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -528,7 +530,13 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
         <TripBudgetSummary
           budget={budgetSummary}
           plannedBudget={plannedBudgetAmount}
-          currencyFallback={budgetSummary?.currency ?? "CNY"}
+          currencyFallback={currencyFallback}
+        />
+
+        <TripExpensesPanel
+          tripId={trip.id}
+          sessionToken={sessionToken}
+          currencyFallback={currencyFallback}
         />
 
         <div className="space-y-4">
