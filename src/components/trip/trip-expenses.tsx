@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { VoiceRecorder } from "@/components/voice/voice-recorder";
+import { getSupabaseClient } from "@/lib/supabase-client";
 
 type ExpenseItem = {
   id: string;
@@ -47,6 +48,7 @@ export function TripExpensesPanel({
   sessionToken,
   currencyFallback = "CNY",
 }: TripExpensesPanelProps) {
+  const supabase = useMemo(() => getSupabaseClient(), []);
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -109,6 +111,43 @@ export function TripExpensesPanel({
     if (!sessionToken) return;
     fetchExpenses();
   }, [sessionToken, fetchExpenses]);
+
+  useEffect(() => {
+    if (!sessionToken) return;
+
+    let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleRefresh = () => {
+      if (refreshTimeout) return;
+      refreshTimeout = setTimeout(() => {
+        refreshTimeout = null;
+        fetchExpenses();
+      }, 150);
+    };
+
+    const channel = supabase
+      .channel(`trip-${tripId}-expenses`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "expenses",
+          filter: `trip_id=eq.${tripId}`,
+        },
+        () => {
+          scheduleRefresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout);
+      }
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, sessionToken, tripId, fetchExpenses]);
 
   const handleFormChange = (patch: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...patch }));

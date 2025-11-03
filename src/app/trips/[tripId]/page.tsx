@@ -164,6 +164,50 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
   }, [fetchTripDetails, loadingSession, sessionToken]);
 
   useEffect(() => {
+    if (!sessionToken || !trip) return;
+
+    const dayIds = new Set(trip.days.map((day) => day.id));
+    if (dayIds.size === 0) return;
+
+    let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (refreshTimeout) return;
+      refreshTimeout = setTimeout(() => {
+        refreshTimeout = null;
+        fetchTripDetails();
+      }, 200);
+    };
+
+    const channel = supabase
+      .channel(`trip-${trip.id}-activities`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "activities",
+        },
+        (payload) => {
+          const newRow = payload.new as { trip_day_id?: string } | null;
+          const oldRow = payload.old as { trip_day_id?: string } | null;
+          const affectedDayId = newRow?.trip_day_id ?? oldRow?.trip_day_id ?? null;
+          if (!affectedDayId || !dayIds.has(affectedDayId)) {
+            return;
+          }
+          scheduleRefresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout);
+      }
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, trip, sessionToken, fetchTripDetails]);
+
+  useEffect(() => {
     if (!trip) {
       setActivityDrafts({});
       setSelectedActivityId(null);
