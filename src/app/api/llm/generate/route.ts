@@ -18,6 +18,19 @@ type TripRow = Database["public"]["Tables"]["trips"]["Row"];
 type TripDayInsert = Database["public"]["Tables"]["trip_days"]["Insert"];
 type ActivityInsert = Database["public"]["Tables"]["activities"]["Insert"];
 type SupabaseClientType = Awaited<ReturnType<typeof requireAuthContext>>["supabase"];
+type TripPromptSource = Pick<
+  TripRow,
+  | "id"
+  | "title"
+  | "destination"
+  | "start_date"
+  | "end_date"
+  | "budget"
+  | "travelers"
+  | "tags"
+  | "llm_request"
+  | "status"
+>;
 const LLM_RATE_LIMIT_WINDOW_MS = resolveRateLimitNumber(
   process.env.LLM_RATE_LIMIT_WINDOW_MS,
   60_000
@@ -111,7 +124,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function fetchTrip(supabase: SupabaseClientType, tripId: string) {
+async function fetchTrip(supabase: SupabaseClientType, tripId: string): Promise<TripPromptSource> {
   const { data, error } = await supabase
     .from("trips")
     .select(
@@ -124,7 +137,7 @@ async function fetchTrip(supabase: SupabaseClientType, tripId: string) {
     throw new ApiErrorResponse("未找到对应的行程草稿。", 404, "trip_not_found", error);
   }
 
-  return data;
+  return data as TripPromptSource;
 }
 
 async function updateTripStatus(
@@ -151,7 +164,7 @@ async function updateTripStatus(
   }
 }
 
-function buildPromptContext(trip: TripRow): ItineraryPromptContext {
+function buildPromptContext(trip: TripPromptSource): ItineraryPromptContext {
   const rawRequest = (trip.llm_request ?? {}) as Record<string, unknown>;
   const travelersRaw = Array.isArray(trip.travelers) ? trip.travelers : [];
 
