@@ -1,0 +1,95 @@
+{
+  "id": "demo-trip-001",
+  "title": "台北文化深度游",
+  "destination": "台湾·台北",
+  "start_date": "2025-03-18",
+  "end_date": "2025-03-21",
+  "budget": 5200,
+  "currency": "CNY",
+  "travelers": [
+    {
+      "name": "Alice",
+      "role": "主规划者",
+      "age": 29
+    },
+    {
+      "name": "Bob",
+      "role": "同行伙伴",
+      "age": 30
+    }
+  ],
+  "tags": ["文化体验", "美食探索", "轻松节奏"],
+  "daily_budget_breakdown": {
+    "住宿": 2000,
+    "餐饮": 1200,
+    "交通": 600,
+    "门票与活动": 1000,
+    "其他": 400
+  },
+  "days": [
+    {
+      "id": "day-1",
+      "date": "2025-03-18",
+      "summary": "抵达台北，入住西门町，夜逛宁夏夜市",
+      "notes": "机场领取悠游卡，可提前预约机场快线。",
+      "activities": [
+        {
+          "id": "act-101",
+          "type": "交通",
+          "start_time": "09:30",
+          "end_time": "10:30",
+          "location": "桃园机场 -> 西门町",
+          "details": {
+            "transport": "机场捷运",
+            "cost": 160,
+            "currency": "TWD"
+          }
+        },
+        {
+          "id": "act-102",
+          "type": "餐饮",
+          "start_time": "19:00",
+          "end_time": "21:00",
+          "location": "宁夏夜市",
+          "details": {
+            "highlights": ["胡椒饼", "盐酥鸡", "豆花"],
+            "estimated_cost": 500,
+            "currency": "TWD"
+          }
+        }
+      ]
+    },
+    {
+      "id": "day-2",
+      "date": "2025-03-19",
+      "summary": "故宫博物院与阳明山赏景",
+      "notes": "提前线上预约故宫门票，阳明山需准备雨具。",
+      "activities": [
+        {
+          "id": "act-201",
+          "type": "观光",
+          "start_time": "10:00",
+          "end_time": "13:00",
+          "location": "国立故宫博物院",
+          "details": {
+            "ticket": 350,
+            "currency": "TWD",
+            "tips": ["可租借语音导览", "避开周一闭馆"]
+          }
+        },
+        {
+          "id": "act-202",
+          "type": "自然风光",
+          "start_time": "15:00",
+          "end_time": "18:30",
+          "location": "阳明山国家公园",
+          "details": {
+            "transport": "公交 260 路",
+            "estimated_cost": 120,
+            "currency": "TWD"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -333,7 +333,7 @@
 
 ## 22. 代理执行任务清单（顺序完成）
 
-> **执行进度提醒**：任务 1-23 已完成（最新完成任务 23：CI/CD 完善），下一步将进入任务 24。
+> **执行进度提醒**：任务 1-24 已完成（最新完成任务 24：文档与示例数据），下一步将进入任务 25。
 
 1. **需求确认与环境检查**
    - 阅读实现指南，列出所有外部服务账号需求。
@@ -405,9 +405,10 @@
     - GitHub Actions：`quality-checks` 负责 `npm ci`、`npm run lint`、`npm run test:e2e` 与 `npm run build`，失败即阻断后续流程。
     - Docker 发布：`docker` 任务仅在推送 `main` 分支时运行，使用 Buildx 推送至 GHCR（`ghcr.io/<仓库>:latest` 与 `:v<package.version>`）。
     - 版本策略：沿用语义化版本（SemVer），发布前使用 `npm version [patch|minor|major]` 同步 `package.json`，并在仓库创建匹配的 `vX.Y.Z` 标签。
-24. **文档与示例数据**
-    - 完成 README、API Key 说明、运行步骤、示例 `.env.example`。
-    - 准备至少一个示例行程 JSON/截图用于 README 与 PDF。
+24. ✅ **文档与示例数据**（已完成：重写 README，新增 `.env.example` & 示例行程 JSON，说明本地/容器启动流程）
+    - README：新增快速开始、环境变量说明、脚本、Docker 部署、CI 策略与常见问题；保持中文叙述保证交付完整性。
+    - 环境变量：在仓库根目录创建 `.env.example`，对关键密钥给出默认值与注释（含 LLM、地图、语音、通知等配置）。
+    - 示例数据：在 `docs/examples/sample-trip.json` 提供台北 3 日行程示例，覆盖预算拆分、每日活动、费用细节，便于演示与测试。
 25. **PDF 交付物**
     - 使用 `md-to-pdf` 或 `pandoc` 生成 PDF，包含 README 与仓库链接。
     - 核对交付要求（Docker 镜像可下载、API Key 有效性说明）。
