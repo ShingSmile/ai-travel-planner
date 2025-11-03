@@ -107,6 +107,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
   const [activityDrafts, setActivityDrafts] = useState<Record<string, ActivityDraft>>({});
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [tripReminder, setTripReminder] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const budgetSummary = useMemo(
     () => normalizeBudgetBreakdown(trip?.budgetBreakdown ?? null),
     [trip?.budgetBreakdown]
@@ -163,6 +164,16 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
     if (!sessionToken) return;
     fetchTripDetails();
   }, [fetchTripDetails, loadingSession, sessionToken]);
+
+  useEffect(() => {
+    if (!trip) {
+      setShareUrl(null);
+      return;
+    }
+    if (typeof window === "undefined") return;
+    const origin = window.location.origin;
+    setShareUrl(`${origin}/trips/${trip.id}/share`);
+  }, [trip]);
 
   useEffect(() => {
     if (!trip) {
@@ -605,6 +616,42 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
           <Link href="/planner/new">
             <Button variant="ghost">创建新行程</Button>
           </Link>
+          {shareUrl && (
+            <>
+              <Button type="button" variant="ghost" onClick={() => window.open(shareUrl, "_blank")}>
+                打开分享页
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(shareUrl);
+                    toast({
+                      title: "已复制分享链接",
+                      description: "将链接发给伙伴即可查看行程概览。",
+                      variant: "success",
+                    });
+                  } catch {
+                    toast({
+                      title: "复制失败",
+                      description: "请手动复制浏览器地址栏中的分享链接。",
+                      variant: "warning",
+                    });
+                  }
+                }}
+              >
+                复制分享链接
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => window.open(`${shareUrl}?print=1`, "_blank")}
+              >
+                导出为 PDF
+              </Button>
+            </>
+          )}
         </div>
       </header>
 
