@@ -106,6 +106,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
 
   const [activityDrafts, setActivityDrafts] = useState<Record<string, ActivityDraft>>({});
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const [tripReminder, setTripReminder] = useState<string | null>(null);
   const budgetSummary = useMemo(
     () => normalizeBudgetBreakdown(trip?.budgetBreakdown ?? null),
     [trip?.budgetBreakdown]
@@ -162,6 +163,29 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
     if (!sessionToken) return;
     fetchTripDetails();
   }, [fetchTripDetails, loadingSession, sessionToken]);
+
+  useEffect(() => {
+    if (!trip) {
+      setTripReminder(null);
+      return;
+    }
+
+    const startDate = new Date(trip.startDate);
+    if (Number.isNaN(startDate.getTime())) {
+      setTripReminder(null);
+      return;
+    }
+
+    const now = new Date();
+    const diffMs = startDate.getTime() - now.getTime();
+    if (diffMs <= 0 || diffMs > 24 * 60 * 60 * 1000) {
+      setTripReminder(null);
+      return;
+    }
+
+    const hours = Math.max(1, Math.round(diffMs / (60 * 60 * 1000)));
+    setTripReminder(`行程将在 ${hours} 小时后开始，请确认交通与住宿等关键事项。`);
+  }, [trip]);
 
   useEffect(() => {
     if (!sessionToken || !trip) return;
@@ -522,6 +546,20 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
 
   return (
     <div className="space-y-8">
+      {tripReminder && (
+        <div className="flex flex-col gap-3 rounded-3xl border border-primary/40 bg-primary/10 p-5 text-sm text-primary md:flex-row md:items-center md:justify-between">
+          <p>{tripReminder}</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="self-start text-primary md:self-center"
+            onClick={() => setTripReminder(null)}
+          >
+            已确认
+          </Button>
+        </div>
+      )}
       <header className="space-y-6 rounded-3xl border border-border bg-surface p-6 shadow-card">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-3xl font-semibold text-foreground">{trip.title}</h1>
@@ -581,6 +619,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
           tripId={trip.id}
           sessionToken={sessionToken}
           currencyFallback={currencyFallback}
+          plannedBudget={plannedBudgetAmount}
         />
 
         <div className="space-y-4">

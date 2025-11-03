@@ -33,6 +33,7 @@ type TripExpensesPanelProps = {
   tripId: string;
   sessionToken: string | null;
   currencyFallback?: string;
+  plannedBudget?: number | null;
 };
 
 type FormState = {
@@ -47,6 +48,7 @@ export function TripExpensesPanel({
   tripId,
   sessionToken,
   currencyFallback = "CNY",
+  plannedBudget = null,
 }: TripExpensesPanelProps) {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const { toast } = useToast();
@@ -56,6 +58,7 @@ export function TripExpensesPanel({
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>("全部");
   const [submitting, setSubmitting] = useState(false);
+  const [budgetNotice, setBudgetNotice] = useState<"none" | "warning" | "critical">("none");
   const [form, setForm] = useState<FormState>({
     category: "",
     amount: "",
@@ -111,6 +114,43 @@ export function TripExpensesPanel({
     if (!sessionToken) return;
     fetchExpenses();
   }, [sessionToken, fetchExpenses]);
+
+  useEffect(() => {
+    if (!plannedBudget || plannedBudget <= 0) {
+      if (budgetNotice !== "none") {
+        setBudgetNotice("none");
+      }
+      return;
+    }
+
+    const totalExpense = summary?.total ?? null;
+    if (totalExpense === null) {
+      if (budgetNotice !== "none") {
+        setBudgetNotice("none");
+      }
+      return;
+    }
+
+    const ratio = totalExpense / plannedBudget;
+    const nextLevel = ratio >= 1 ? "critical" : ratio >= 0.8 ? "warning" : "none";
+
+    if (nextLevel !== budgetNotice) {
+      setBudgetNotice(nextLevel);
+      if (nextLevel === "warning") {
+        toast({
+          title: "预算即将超标",
+          description: "支出已超过预算的 80%，请关注费用控制。",
+          variant: "warning",
+        });
+      } else if (nextLevel === "critical") {
+        toast({
+          title: "预算已超出",
+          description: "当前支出已超出设定预算，建议立即调整计划。",
+          variant: "error",
+        });
+      }
+    }
+  }, [summary, plannedBudget, toast, budgetNotice]);
 
   useEffect(() => {
     if (!sessionToken) return;
