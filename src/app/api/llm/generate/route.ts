@@ -5,6 +5,7 @@ import { requireAuthContext } from "@/lib/auth-helpers";
 import { BailianClient } from "@/lib/llm";
 import { LLMGenerationError } from "@/lib/llm/errors";
 import type { ItineraryPromptContext, StructuredTripPlan } from "@/lib/llm/types";
+import { enrichActivitiesWithPoi } from "@/lib/amap/poi";
 import type { Database } from "@/types/database";
 
 const requestSchema = z.object({
@@ -228,6 +229,12 @@ async function persistGenerationResult(
   }
 
   if (activityPayload.length > 0) {
+    await enrichActivitiesWithPoi(activityPayload, {
+      city: plan.overview.destination,
+      keywords: [plan.overview.destination, plan.overview.title],
+      limit: 12,
+    });
+
     const { error: insertActivityError } = await supabase
       .from("activities")
       .insert(activityPayload);
