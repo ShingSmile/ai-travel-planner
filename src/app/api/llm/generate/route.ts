@@ -7,6 +7,7 @@ import { LLMGenerationError } from "@/lib/llm/errors";
 import type { ItineraryPromptContext, StructuredTripPlan } from "@/lib/llm/types";
 import { enrichActivitiesWithPoi } from "@/lib/amap/poi";
 import type { Database } from "@/types/database";
+import { consumeRateLimit, resolveRateLimitNumber } from "@/lib/rate-limit";
 
 const requestSchema = z.object({
   tripId: z.string().uuid(),
@@ -17,10 +18,15 @@ type TripRow = Database["public"]["Tables"]["trips"]["Row"];
 type TripDayInsert = Database["public"]["Tables"]["trip_days"]["Insert"];
 type ActivityInsert = Database["public"]["Tables"]["activities"]["Insert"];
 type SupabaseClientType = Awaited<ReturnType<typeof requireAuthContext>>["supabase"];
+const LLM_RATE_LIMIT_WINDOW_MS = resolveRateLimitNumber(
+  process.env.LLM_RATE_LIMIT_WINDOW_MS,
+  60_000
+);
+const LLM_RATE_LIMIT_MAX = resolveRateLimitNumber(process.env.LLM_RATE_LIMIT_MAX, 3);
 
 export async function POST(request: NextRequest) {
   try {
-    const { supabase } = await requireAuthContext();
+    const { supabase, user } = await requireAuthContext();
     const body = await request.json();
     const parsed = requestSchema.safeParse(body);
 
@@ -29,6 +35,24 @@ export async function POST(request: NextRequest) {
     }
 
     const { tripId, forceRegenerate } = parsed.data;
+    const rateLimitResult = consumeRateLimit({
+      bucket: "llm_generate",
+      identifier: user.id,
+      windowMs: LLM_RATE_LIMIT_WINDOW_MS,
+      limit: LLM_RATE_LIMIT_MAX,
+    });
+
+    if (!rateLimitResult.allowed) {
+      throw new ApiErrorResponse(
+        "生成请求过于频繁，请稍后再试。",
+        429,
+        "llm_rate_limited",
+        {
+          retryAfter: rateLimitResult.retryAfter,
+        },
+        { headers: rateLimitResult.headers }
+      );
+    }
 
     const trip = await fetchTrip(supabase, tripId);
     const previousStatus = trip.status ?? "draft";
@@ -60,12 +84,15 @@ export async function POST(request: NextRequest) {
       });
 
       generationSucceeded = true;
-      return ok({
-        tripId,
-        plan: result.output,
-        usage: result.usage ?? null,
-        attempts: result.attempts,
-      });
+      return ok(
+        {
+          tripId,
+          plan: result.output,
+          usage: result.usage ?? null,
+          attempts: result.attempts,
+        },
+        { headers: rateLimitResult.headers }
+      );
     } finally {
       if (!generationSucceeded) {
         await updateTripStatus(supabase, tripId, previousStatus);

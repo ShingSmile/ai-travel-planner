@@ -48,22 +48,38 @@ export class ApiErrorResponse extends Error {
   public readonly status: number;
   public readonly code?: string;
   public readonly details?: unknown;
+  public readonly exposeDetails: boolean;
+  public readonly headers?: HeadersInit;
 
-  constructor(message: string, status = 400, code?: string, details?: unknown) {
+  constructor(
+    message: string,
+    status = 400,
+    code?: string,
+    details?: unknown,
+    options?: {
+      exposeDetails?: boolean;
+      headers?: HeadersInit;
+    }
+  ) {
     super(message);
     this.name = "ApiErrorResponse";
     this.status = status;
     this.code = code;
     this.details = details;
+    this.exposeDetails = options?.exposeDetails ?? false;
+    this.headers = options?.headers;
   }
 }
 
 export function handleApiError(error: unknown) {
   if (error instanceof ApiErrorResponse) {
+    const shouldExposeDetails = error.exposeDetails || process.env.NODE_ENV !== "production";
+    const details = shouldExposeDetails ? error.details : undefined;
     return fail(error.message, {
       status: error.status,
       code: error.code,
-      details: error.details,
+      details,
+      headers: error.headers,
     });
   }
 

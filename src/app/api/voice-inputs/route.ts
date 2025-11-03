@@ -4,11 +4,17 @@ import type { NextRequest } from "next/server";
 import { ok, handleApiError, ApiErrorResponse } from "@/lib/api-response";
 import { requireAuthContext } from "@/lib/auth-helpers";
 import { recognizeVoice } from "@/lib/voice/recognizer";
+import { consumeRateLimit, resolveRateLimitNumber } from "@/lib/rate-limit";
 
 const MAX_FILE_SIZE = Number(process.env.VOICE_MAX_FILE_SIZE ?? 5 * 1024 * 1024); // 5MB 默认限制
 type VoicePurpose = "trip_notes" | "expense";
 const ALLOWED_PURPOSES = new Set<VoicePurpose>(["trip_notes", "expense"]);
 const DEFAULT_BUCKET = process.env.SUPABASE_VOICE_BUCKET ?? "voice-inputs";
+const VOICE_RATE_LIMIT_WINDOW_MS = resolveRateLimitNumber(
+  process.env.VOICE_RATE_LIMIT_WINDOW_MS,
+  60_000
+);
+const VOICE_RATE_LIMIT_MAX = resolveRateLimitNumber(process.env.VOICE_RATE_LIMIT_MAX, 10);
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,6 +36,25 @@ export async function POST(request: NextRequest) {
         `音频文件过大，请控制在 ${sizeMb} MB 以内。`,
         413,
         "file_too_large"
+      );
+    }
+
+    const rateLimitResult = consumeRateLimit({
+      bucket: "voice_upload",
+      identifier: user.id,
+      windowMs: VOICE_RATE_LIMIT_WINDOW_MS,
+      limit: VOICE_RATE_LIMIT_MAX,
+    });
+
+    if (!rateLimitResult.allowed) {
+      throw new ApiErrorResponse(
+        "上传过于频繁，请稍后再试。",
+        429,
+        "voice_rate_limited",
+        {
+          retryAfter: rateLimitResult.retryAfter,
+        },
+        { headers: rateLimitResult.headers }
       );
     }
 
@@ -125,12 +150,15 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", voiceInput.id);
 
-    return ok({
-      voiceInputId: voiceInput.id,
-      transcript: recognitionResult.transcript,
-      intent: recognitionResult.intent,
-      expenseDraft: recognitionResult.expenseDraft,
-    });
+    return ok(
+      {
+        voiceInputId: voiceInput.id,
+        transcript: recognitionResult.transcript,
+        intent: recognitionResult.intent,
+        expenseDraft: recognitionResult.expenseDraft,
+      },
+      { headers: rateLimitResult.headers }
+    );
   } catch (error) {
     return handleApiError(error);
   }
