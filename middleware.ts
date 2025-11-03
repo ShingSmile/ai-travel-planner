@@ -45,10 +45,28 @@ export const config = {
 };
 
 function getRequestIdentifier(request: NextRequest) {
-  return (
-    request.ip ||
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "anonymous"
-  );
+  const requestWithIp = request as NextRequest & { ip?: string | null };
+  if (requestWithIp.ip) {
+    return requestWithIp.ip;
+  }
+
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    const first = forwardedFor.split(",")[0]?.trim();
+    if (first) {
+      return first;
+    }
+  }
+
+  const realIp = request.headers.get("x-real-ip");
+  if (realIp) {
+    return realIp;
+  }
+
+  const cfIp = request.headers.get("cf-connecting-ip");
+  if (cfIp) {
+    return cfIp;
+  }
+
+  return "anonymous";
 }
