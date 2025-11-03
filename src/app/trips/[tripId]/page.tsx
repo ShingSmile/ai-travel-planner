@@ -119,6 +119,11 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
   const currencyFallback = budgetSummary?.currency ?? "CNY";
 
   useEffect(() => {
+    if (!supabase) {
+      setSessionToken(null);
+      setLoadingSession(false);
+      return;
+    }
     supabase.auth.getSession().then(({ data }) => {
       setSessionToken(data.session?.access_token ?? null);
       setLoadingSession(false);
@@ -199,7 +204,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
   }, [trip]);
 
   useEffect(() => {
-    if (!sessionToken || !trip) return;
+    if (!sessionToken || !trip || !supabase) return;
 
     const dayIds = new Set(trip.days.map((day) => day.id));
     if (dayIds.size === 0) return;
@@ -213,7 +218,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
       }, 200);
     };
 
-    const channel = supabase
+    const channel = supabase!
       .channel(`trip-${trip.id}-activities`)
       .on(
         "postgres_changes",
@@ -238,7 +243,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
       if (refreshTimeout) {
         clearTimeout(refreshTimeout);
       }
-      supabase.removeChannel(channel);
+      supabase!.removeChannel(channel);
     };
   }, [supabase, trip, sessionToken, fetchTripDetails]);
 
@@ -981,7 +986,7 @@ function normalizeBudgetBreakdown(value: Record<string, unknown> | null): Budget
 
   const tips = Array.isArray(source.tips)
     ? (source.tips as unknown[])
-        .filter((tip): tip is string => typeof tip === "string" && tip.trim())
+        .filter((tip): tip is string => typeof tip === "string" && tip.trim().length > 0)
         .map((tip) => tip.trim())
     : [];
 

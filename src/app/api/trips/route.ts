@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, handleApiError, ApiErrorResponse } from "@/lib/api-response";
 import { requireAuthContext } from "@/lib/auth-helpers";
+import type { Database, Json } from "@/types/database";
 
 const listQuerySchema = z.object({
   limit: z
@@ -27,7 +28,7 @@ const createTripSchema = z
     budget: z.number().nonnegative().optional(),
     travelers: z.array(travelerSchema).optional(),
     tags: z.array(z.string().min(1)).optional(),
-    llmRequest: z.record(z.unknown()).optional(),
+    llmRequest: z.record(z.string(), z.unknown()).optional(),
     notes: z.string().max(500).optional(),
   })
   .refine((data) => new Date(data.startDate) <= new Date(data.endDate), {
@@ -87,16 +88,44 @@ export async function POST(request: NextRequest) {
 
     const payload = parsedBody.data;
 
-    const insertPayload = {
+    const normalizedBudget = typeof payload.budget === "number" ? payload.budget.toFixed(2) : null;
+
+    const travelerRecords =
+      payload.travelers
+        ?.map((traveler) => {
+          const normalized: Record<string, Json | undefined> = {};
+          if (traveler.name) {
+            normalized.name = traveler.name;
+          }
+          if (traveler.role) {
+            normalized.role = traveler.role;
+          }
+          if (typeof traveler.age === "number") {
+            normalized.age = traveler.age;
+          }
+          return normalized;
+        })
+        .filter((traveler) => Object.keys(traveler).length > 0) ?? [];
+
+    const normalizedTravelers: Json | null = travelerRecords.length > 0 ? travelerRecords : null;
+
+    const normalizedTags = payload.tags && payload.tags.length > 0 ? payload.tags : null;
+
+    const normalizedLlmRequest: Json | null =
+      payload.llmRequest && Object.keys(payload.llmRequest).length > 0
+        ? (payload.llmRequest as Json)
+        : null;
+
+    const insertPayload: Database["public"]["Tables"]["trips"]["Insert"] = {
       user_id: user.id,
       title: payload.title,
       destination: payload.destination,
       start_date: payload.startDate,
       end_date: payload.endDate,
-      budget: payload.budget ?? null,
-      travelers: payload.travelers ?? [],
-      tags: payload.tags ?? [],
-      llm_request: payload.llmRequest ?? null,
+      budget: normalizedBudget,
+      travelers: normalizedTravelers,
+      tags: normalizedTags,
+      llm_request: normalizedLlmRequest,
       status: "draft" as const,
     };
 

@@ -4,9 +4,13 @@ import { ApiErrorResponse, handleApiError, ok } from "@/lib/api-response";
 import { requireAuthContext } from "@/lib/auth-helpers";
 import { BailianClient } from "@/lib/llm";
 import { LLMGenerationError } from "@/lib/llm/errors";
-import type { ItineraryPromptContext, StructuredTripPlan } from "@/lib/llm/types";
+import type {
+  ItineraryPromptContext,
+  StructuredTripPlan,
+  TravelerPreference,
+} from "@/lib/llm/types";
 import { enrichActivitiesWithPoi } from "@/lib/amap/poi";
-import type { Database } from "@/types/database";
+import type { Database, Json } from "@/types/database";
 import { consumeRateLimit, resolveRateLimitNumber } from "@/lib/rate-limit";
 
 const requestSchema = z.object({
@@ -92,7 +96,7 @@ export async function POST(request: NextRequest) {
       await persistGenerationResult(supabase, tripId, result.output);
       const totalBudget = normalizeNumeric(result.output.budget?.total);
       await updateTripStatus(supabase, tripId, "ready", {
-        budget_breakdown: result.output.budget,
+        budget_breakdown: result.output.budget as unknown as Json,
         ...(totalBudget !== null ? { budget: totalBudget } : {}),
       });
 
@@ -168,6 +172,24 @@ function buildPromptContext(trip: TripPromptSource): ItineraryPromptContext {
   const rawRequest = (trip.llm_request ?? {}) as Record<string, unknown>;
   const travelersRaw = Array.isArray(trip.travelers) ? trip.travelers : [];
 
+  const travelers: TravelerPreference[] = travelersRaw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const traveler = item as Record<string, unknown>;
+      const normalized: TravelerPreference = {};
+      if (typeof traveler.name === "string") {
+        normalized.name = traveler.name;
+      }
+      if (typeof traveler.role === "string") {
+        normalized.role = traveler.role;
+      }
+      if (typeof traveler.age === "number") {
+        normalized.age = traveler.age;
+      }
+      return Object.keys(normalized).length > 0 ? normalized : null;
+    })
+    .filter((item): item is TravelerPreference => item !== null);
+
   return {
     title: trip.title,
     destination: trip.destination,
@@ -179,23 +201,7 @@ function buildPromptContext(trip: TripPromptSource): ItineraryPromptContext {
       : undefined,
     notes: typeof rawRequest.notes === "string" ? rawRequest.notes : undefined,
     travelStyle: typeof rawRequest.travelStyle === "string" ? rawRequest.travelStyle : undefined,
-    travelers: travelersRaw
-      .map((item) => {
-        if (!item || typeof item !== "object") return null;
-        const traveler = item as Record<string, unknown>;
-        const name = typeof traveler.name === "string" ? traveler.name : undefined;
-        const role = typeof traveler.role === "string" ? traveler.role : undefined;
-        const age = typeof traveler.age === "number" ? traveler.age : undefined;
-        if (!name && !role && typeof age !== "number") {
-          return null;
-        }
-        return {
-          name,
-          role,
-          age,
-        };
-      })
-      .filter((item): item is NonNullable<ItineraryPromptContext["travelers"]>[number] => !!item),
+    travelers: travelers.length > 0 ? travelers : undefined,
   };
 }
 
@@ -308,7 +314,7 @@ function buildActivityInsert(
       tips: activity.tips ?? [],
       budget: activity.budget ?? null,
       sourceType: type,
-    },
+    } as Json,
     cost: normalizeNumeric(activity.budget?.amount),
     currency: activity.budget?.currency ?? null,
   };
@@ -330,7 +336,7 @@ function buildAccommodationInsert(
       name: accommodation.name,
       summary: `入住 ${accommodation.name}`,
       budget: accommodation.budget ?? null,
-    },
+    } as Json,
     cost: normalizeNumeric(accommodation.budget?.amount),
     currency: accommodation.budget?.currency ?? null,
   };

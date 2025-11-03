@@ -111,9 +111,9 @@ export function TripExpensesPanel({
   }, [sessionToken, tripId]);
 
   useEffect(() => {
-    if (!sessionToken) return;
+    if (!sessionToken || !supabase) return;
     fetchExpenses();
-  }, [sessionToken, fetchExpenses]);
+  }, [sessionToken, supabase, fetchExpenses]);
 
   useEffect(() => {
     if (!plannedBudget || plannedBudget <= 0) {
@@ -153,7 +153,7 @@ export function TripExpensesPanel({
   }, [summary, plannedBudget, toast, budgetNotice]);
 
   useEffect(() => {
-    if (!sessionToken) return;
+    if (!sessionToken || !supabase) return;
 
     let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -165,7 +165,7 @@ export function TripExpensesPanel({
       }, 150);
     };
 
-    const channel = supabase
+    const channel = supabase!
       .channel(`trip-${tripId}-expenses`)
       .on(
         "postgres_changes",
@@ -185,7 +185,7 @@ export function TripExpensesPanel({
       if (refreshTimeout) {
         clearTimeout(refreshTimeout);
       }
-      supabase.removeChannel(channel);
+      supabase!.removeChannel(channel);
     };
   }, [supabase, sessionToken, tripId, fetchExpenses]);
 

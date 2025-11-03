@@ -31,14 +31,58 @@ type ShareTrip = {
   }>;
 };
 
+function isShareTrip(value: unknown): value is ShareTrip {
+  if (!value || typeof value !== "object") return false;
+  const trip = value as Record<string, unknown>;
+  if (
+    typeof trip.id !== "string" ||
+    typeof trip.title !== "string" ||
+    typeof trip.destination !== "string" ||
+    typeof trip.start_date !== "string" ||
+    typeof trip.end_date !== "string" ||
+    !Array.isArray(trip.days)
+  ) {
+    return false;
+  }
+
+  return (trip.days as unknown[]).every((day) => {
+    if (!day || typeof day !== "object") return false;
+    const dayRecord = day as Record<string, unknown>;
+    if (
+      typeof dayRecord.id !== "string" ||
+      typeof dayRecord.date !== "string" ||
+      !Array.isArray(dayRecord.activities)
+    ) {
+      return false;
+    }
+
+    return (dayRecord.activities as unknown[]).every((activity) => {
+      if (!activity || typeof activity !== "object") return false;
+      const activityRecord = activity as Record<string, unknown>;
+      return typeof activityRecord.id === "string";
+    });
+  });
+}
+
 export default function TripSharePage({ params }: { params: { tripId: string } }) {
-  const supabase = useMemo(() => getSupabaseClient(), []);
+  const supabase = useMemo(() => {
+    try {
+      return getSupabaseClient();
+    } catch (error) {
+      console.error("[TripShare] failed to init supabase client:", error);
+      return null;
+    }
+  }, []);
   const searchParams = useSearchParams();
   const [trip, setTrip] = useState<ShareTrip | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(() => supabase !== null);
+  const [error, setError] = useState<string | null>(() =>
+    supabase ? null : "系统暂未配置数据服务，无法加载行程。"
+  );
 
   useEffect(() => {
+    if (!supabase) return;
+    let cancelled = false;
     const loadTrip = async () => {
       setLoading(true);
       setError(null);
@@ -50,6 +94,8 @@ export default function TripSharePage({ params }: { params: { tripId: string } }
         .eq("id", params.tripId)
         .single();
 
+      if (cancelled) return;
+
       if (queryError || !data) {
         setError("未找到行程，或该行程未开放分享。");
         setTrip(null);
@@ -57,11 +103,21 @@ export default function TripSharePage({ params }: { params: { tripId: string } }
         return;
       }
 
-      setTrip(data as ShareTrip);
+      if (!isShareTrip(data)) {
+        setError("行程数据格式不正确，无法分享。");
+        setTrip(null);
+        setLoading(false);
+        return;
+      }
+
+      setTrip(data);
       setLoading(false);
     };
 
     void loadTrip();
+    return () => {
+      cancelled = true;
+    };
   }, [params.tripId, supabase]);
 
   useEffect(() => {

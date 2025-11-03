@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AMap } from "@amap/amap-jsapi-types";
+import "@amap/amap-jsapi-types";
 import AMapLoader from "@amap/amap-jsapi-loader";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -44,6 +44,23 @@ type Coordinates = {
   lat: number;
 };
 
+type AMapNamespace = typeof globalThis extends { AMap: infer T } ? T : never;
+type GeocoderStatus = "complete" | "no_data" | "error";
+type GeocodeResult = {
+  geocodes: Array<{
+    location?: {
+      getLng(): number;
+      getLat(): number;
+    };
+  }>;
+};
+type AMapGeocoder = {
+  getLocation: (
+    address: string,
+    callback: (status: GeocoderStatus, result: GeocodeResult) => void
+  ) => void;
+};
+
 const loaderOptions = {
   key: process.env.NEXT_PUBLIC_AMAP_KEY ?? "",
   version: "2.0",
@@ -62,12 +79,12 @@ const activityTypeColor: Record<string, string> = {
 export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<AMap.Map | null>(null);
-  const amapRef = useRef<typeof AMap | null>(null);
+  const amapRef = useRef<AMapNamespace | null>(null);
   const overlaysRef = useRef<{ markers: MapOverlay[]; segments: MapSegment[] }>({
     markers: [],
     segments: [],
   });
-  const geocoderRef = useRef<AMap.Geocoder | null>(null);
+  const geocoderRef = useRef<AMapGeocoder | null>(null);
   const geocodeCacheRef = useRef<Map<string, Coordinates>>(new Map());
 
   const [loading, setLoading] = useState(true);
@@ -116,7 +133,7 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
 
         geocoderRef.current = new amap.Geocoder({
           city: "全国",
-        });
+        }) as AMapGeocoder;
 
         setLoading(false);
       })
@@ -202,7 +219,7 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
             fontWeight: "600",
           },
           content: orderLabel,
-        });
+        } as Parameters<AMap.Marker["setLabel"]>[0]);
 
         marker.on("click", () => {
           onActivitySelect?.(activity.id);
@@ -275,8 +292,13 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     infoWindow.setContent(
       `<div class="trip-map-infowindow"><strong>${overlay.orderLabel}</strong></div>`
     );
-    infoWindow.open(mapRef.current, overlay.marker.getPosition());
-    mapRef.current.setCenter(overlay.marker.getPosition());
+    const markerPosition = overlay.marker.getPosition();
+    if (!markerPosition) {
+      return;
+    }
+    const markerCenter: [number, number] = [markerPosition.getLng(), markerPosition.getLat()];
+    infoWindow.open(mapRef.current, markerCenter);
+    mapRef.current.setCenter(markerCenter);
   }, [selectedActivityId]);
 
   if (loading) {
@@ -411,7 +433,7 @@ function groupEntriesByDay<
   }));
 }
 
-function createMarkerIcon(amap: typeof AMap, type: string) {
+function createMarkerIcon(amap: AMapNamespace, type: string) {
   const color = activityTypeColor[type] ?? "#0f172a";
   const svg = `
     <svg width="28" height="32" viewBox="0 0 28 32" fill="none" xmlns="http://www.w3.org/2000/svg">
