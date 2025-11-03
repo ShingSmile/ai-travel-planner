@@ -164,7 +164,7 @@ export default function PlannerNewPage() {
         variant: "success",
       });
       resetForm();
-      router.push(`/trips/${result.data.trip.id}`);
+      router.push(`/trips/${result.data.trip.id}/generate`);
     } catch (error) {
       console.error("[planner/new] create trip error:", error);
       toast({

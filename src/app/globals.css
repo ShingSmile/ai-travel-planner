@@ -13,6 +13,7 @@
   --warning: #f59e0b;
   --warning-foreground: #fdf6ec;
   --destructive: #dc2626;
+  --destructive-foreground: #fee2e2;
   --radius-xl: 24px;
 }
 
@@ -29,6 +30,7 @@
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --radius-xl: var(--radius-xl);
@@ -48,6 +50,7 @@
     --warning: #fbbc05;
     --warning-foreground: #172554;
     --destructive: #f87171;
+    --destructive-foreground: #0f172a;
   }
 }
 
