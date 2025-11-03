@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { cn } from "@/lib/utils";
 import { TripMap } from "@/components/trip/trip-map";
+import { TripBudgetSummary, type NormalizedBudget } from "@/components/trip/trip-budget";
 
 type TripDetail = {
   id: string;
@@ -73,6 +74,8 @@ type ActivityDraft = {
   deleting: boolean;
 };
 
+type BudgetSummary = NormalizedBudget;
+
 const statusLabel: Record<string, string> = {
   draft: "草稿",
   generating: "生成中",
@@ -102,6 +105,14 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
 
   const [activityDrafts, setActivityDrafts] = useState<Record<string, ActivityDraft>>({});
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const budgetSummary = useMemo(
+    () => normalizeBudgetBreakdown(trip?.budgetBreakdown ?? null),
+    [trip?.budgetBreakdown]
+  );
+  const plannedBudgetAmount = useMemo(
+    () => parseBudgetAmount(trip?.budget ?? null),
+    [trip?.budget]
+  );
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -514,6 +525,12 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
       </header>
 
       <section className="space-y-6">
+        <TripBudgetSummary
+          budget={budgetSummary}
+          plannedBudget={plannedBudgetAmount}
+          currencyFallback={budgetSummary?.currency ?? "CNY"}
+        />
+
         <div className="space-y-4">
           <header className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-foreground">行程地图</h2>
@@ -787,6 +804,82 @@ function toIsoString(local: string) {
   } catch {
     return null;
   }
+}
+
+function normalizeBudgetBreakdown(value: Record<string, unknown> | null): BudgetSummary | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const total = toFiniteNumber(source.total);
+  if (total === null) return null;
+  const currency =
+    typeof source.currency === "string" && source.currency.trim() ? source.currency.trim() : "CNY";
+
+  const breakdownSource = Array.isArray(source.breakdown) ? source.breakdown : [];
+  const breakdown = breakdownSource
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const category =
+        typeof record.category === "string" && record.category.trim()
+          ? record.category.trim()
+          : null;
+      const amount = toFiniteNumber(record.amount);
+      if (!category || amount === null) return null;
+      const description =
+        typeof record.description === "string" && record.description.trim()
+          ? record.description.trim()
+          : undefined;
+      const percentageValue = toFiniteNumber(record.percentage);
+      const percentage =
+        percentageValue !== null ? percentageValue : total > 0 ? (amount / total) * 100 : 0;
+      return {
+        category,
+        amount,
+        description,
+        percentage: Math.max(0, Math.min(100, percentage)),
+      };
+    })
+    .filter(Boolean) as BudgetSummary["breakdown"];
+
+  const tips = Array.isArray(source.tips)
+    ? (source.tips as unknown[])
+        .filter((tip): tip is string => typeof tip === "string" && tip.trim())
+        .map((tip) => tip.trim())
+    : [];
+
+  return {
+    currency,
+    total,
+    breakdown,
+    tips,
+  };
+}
+
+function parseBudgetAmount(value: TripDetail["budget"] | null | undefined) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
 }
 
 function extractCoordinatesFromDetails(details: Record<string, unknown> | null) {
