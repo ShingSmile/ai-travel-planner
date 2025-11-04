@@ -125,7 +125,7 @@
    - 录音组件提供状态（录制中/上传/完成）、噪音提示
 2. **后端**：
    - 将音频上传至 Supabase Storage 暂存
-   - 按 `VOICE_RECOGNIZER_PROVIDER` 调用真实服务：目前接入 OpenAI Whisper（`openai`），同时保留 `mock` 降级
+   - 按 `VOICE_RECOGNIZER_PROVIDER` 调用真实服务：目前接入科大讯飞 WebAPI（`iflytek`），同时保留 `mock` 降级与 `openai` 备选
    - 对识别文本进行意图解析，自动填充表单或新增费用条目
 3. **容错**：
    - 识别失败时提示重试
@@ -133,8 +133,9 @@
    - 通过 `VOICE_RECOGNIZER_TIMEOUT_MS` 控制 API 超时（默认 45s），超时返回友好提示
 
 > 配置说明：
-> - `VOICE_RECOGNIZER_PROVIDER=mock` 时，使用本地示例文本；改为 `openai` 后需提供 `OPENAI_API_KEY`、`OPENAI_VOICE_MODEL`（示例：`gpt-4o-mini-transcribe`）及可选 `OPENAI_API_BASE_URL`。
-> - 可设置 `VOICE_RECOGNIZER_MOCK_TRANSCRIPT` 方便演示环境返回固定文案。
+> - `VOICE_RECOGNIZER_PROVIDER=iflytek` 时，需要配置 `IFLYTEK_APP_ID`、`IFLYTEK_API_KEY`、`IFLYTEK_API_SECRET` 及可选参数（引擎、语种、口音等）。
+> - `VOICE_RECOGNIZER_PROVIDER=openai` 可作为备选方案，需提供 `OPENAI_API_KEY`、`OPENAI_VOICE_MODEL` 等。
+> - `VOICE_RECOGNIZER_PROVIDER=mock` 时，可通过 `VOICE_RECOGNIZER_MOCK_TRANSCRIPT` 设置固定演示文案。
 
 ## 10. 地图与路线
 - 引入高德 JS SDK，配置安全密钥与 referer 白名单
@@ -338,7 +339,7 @@
 
 ## 22. 代理执行任务清单（顺序完成）
 
-> **执行进度提醒**：任务 1-27 已完成（最新完成任务 27：接入 OpenAI 语音识别服务），继续推进后续交付。
+> **执行进度提醒**：任务 1-27 已完成（最新完成任务 27：集成科大讯飞语音识别服务），继续推进后续交付。
 
 1. **需求确认与环境检查**
    - 阅读实现指南，列出所有外部服务账号需求。
@@ -422,10 +423,10 @@
     - 自测：运行 `npm run lint` 确保代码规范；记录 E2E 依赖（需 Supabase + Playwright）供验收者复现。
     - 测试报告：在 `docs/test-report.md` 汇总自动化与手动检查结果，标明环境依赖与潜在风险。
     - 交付物：确认 `docs/output/*.pdf`、Docker 镜像构建指令、README 操作指南齐备，可据此发布最终 Release。
-27. ✅ **语音识别服务接入**（已完成：接入 OpenAI Whisper 转写 API 并保留 mock 降级）
-    - 在 `src/lib/voice/recognizer.ts` 中实现基于 `OPENAI_API_KEY` 的真实调用，支持超时控制与错误处理。
-    - 识别结果统一回填 Supabase 与前端，并保留 `VOICE_RECOGNIZER_PROVIDER=mock` 的降级开关。
-    - 更新 `.env.example`、`.env.docker` 与 README，补充 OpenAI 配置项与超时说明。
+27. ✅ **语音识别服务接入**（已完成：接入科大讯飞 WebAPI 并保留 mock/openai 降级）
+    - 在 `src/lib/voice/recognizer.ts` 中实现基于讯飞 WebAPI 的鉴权签名、请求封装与结果解析。
+    - 识别结果统一回填 Supabase 与前端，支持 `iflytek`、`mock`、`openai` 三种模式灵活切换。
+    - 更新 `.env.example`、`.env.docker` 与 README，补充讯飞参数说明及可选的 OpenAI 备选配置。
 28. **语音识别体验验证**
     - 编写/更新 Playwright 端到端用例，覆盖行程备注语音录入与费用语音录入的成功路径与失败回退。
     - 在 `docs/test-report.md` 记录实际测试截图或日志，确保语音识别结果稳定、延迟可接受（目标 <5s）。

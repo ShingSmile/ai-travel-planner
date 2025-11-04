@@ -1,4 +1,5 @@
-import type { Buffer } from "node:buffer";
+import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { ApiErrorResponse } from "@/lib/api-response";
 import type { VoiceIntent } from "@/types/voice";
 
@@ -73,6 +74,10 @@ export async function recognizeVoice({
       (transcriptHint && transcriptHint.trim()) ||
       process.env.VOICE_RECOGNIZER_MOCK_TRANSCRIPT?.trim() ||
       "（示例）请接入真实语音识别服务以获得准确文本。";
+  } else if (provider === "iflytek" || provider === "xfyun") {
+    transcript = await recognizeWithIflytek({
+      audio,
+    });
   } else if (provider === "openai" || provider === "openai_whisper" || provider === "whisper") {
     transcript = await recognizeWithOpenAi({
       audio,
@@ -196,6 +201,101 @@ async function recognizeWithOpenAi({
   }
 }
 
+async function recognizeWithIflytek({ audio }: { audio: Buffer }) {
+  const appId = process.env.IFLYTEK_APP_ID?.trim();
+  const apiKey = process.env.IFLYTEK_API_KEY?.trim();
+  const apiSecret = process.env.IFLYTEK_API_SECRET?.trim();
+
+  if (!appId || !apiKey || !apiSecret) {
+    throw new ApiErrorResponse(
+      "未配置讯飞语音识别密钥，请设置 IFLYTEK_APP_ID、IFLYTEK_API_KEY、IFLYTEK_API_SECRET。",
+      500,
+      "voice_provider_not_configured"
+    );
+  }
+
+  const baseUrl =
+    process.env.IFLYTEK_API_BASE_URL?.replace(/\/+$/, "") ??
+    "https://api.xfyun.cn/v1/service/v1/iat";
+  const engineType = process.env.IFLYTEK_ENGINE_TYPE?.trim() || "intelligent_general";
+  const audioEncoding = process.env.IFLYTEK_AUDIO_ENCODING?.trim() || "raw";
+  const resultLevel = process.env.IFLYTEK_RESULT_LEVEL?.trim() || "complete";
+  const language = process.env.IFLYTEK_LANGUAGE?.trim() || "zh_cn";
+  const accent = process.env.IFLYTEK_ACCENT?.trim() || "mandarin";
+
+  // 讯飞 WebAPI 要求 PCM 16k 原始音频，此处直接传递浏览器录制的音频，
+  // 生产环境建议在上传前进行格式转换以提升识别准确度。
+  const audioBase64 = audio.toString("base64");
+
+  const curTime = Math.floor(Date.now() / 1000).toString();
+  const paramPayload = {
+    engine_type: engineType,
+    aue: audioEncoding,
+    language,
+    accent,
+    result_level: resultLevel,
+  };
+  const paramBase64 = Buffer.from(JSON.stringify(paramPayload), "utf-8").toString("base64");
+  const checksum = createHash("md5").update(`${apiKey}${curTime}${paramBase64}`).digest("hex");
+
+  const body = new URLSearchParams({ audio: audioBase64 });
+
+  const response = await fetch(baseUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+      "X-Appid": appId,
+      "X-CurTime": curTime,
+      "X-Param": paramBase64,
+      "X-CheckSum": checksum,
+      "X-Real-Ip": process.env.IFLYTEK_REAL_IP?.trim() || "127.0.0.1",
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    const errorBody = await safeReadJson(response).catch(async () => ({
+      raw: await response.text().catch(() => null),
+    }));
+    throw new ApiErrorResponse(
+      "语音识别服务调用失败，请稍后重试。",
+      502,
+      "voice_provider_http_error",
+      {
+        status: response.status,
+        body: errorBody,
+      }
+    );
+  }
+
+  const payload = await response.json();
+  const code = Number(payload?.code ?? payload?.ret ?? -1);
+  if (Number.isNaN(code) || code !== 0) {
+    throw new ApiErrorResponse(
+      payload?.desc ?? payload?.message ?? "语音识别服务处理失败，请稍后重试。",
+      502,
+      "voice_provider_error",
+      payload
+    );
+  }
+
+  const transcript =
+    extractIflytekTranscript(payload?.data) ??
+    extractIflytekTranscript(payload?.result) ??
+    (typeof payload?.text === "string" ? payload.text.trim() : null);
+
+  if (!transcript) {
+    throw new ApiErrorResponse(
+      "语音识别服务未返回有效文本。",
+      502,
+      "voice_provider_empty",
+      payload
+    );
+  }
+
+  return transcript;
+}
+
 function inferIntent(purpose: VoicePurpose, transcript: string): VoiceIntent {
   if (purpose === "expense") {
     return "expense";
@@ -255,4 +355,105 @@ function resolveTimeout(candidate: number, fallback: number) {
     return fallback;
   }
   return Math.max(5000, Math.min(candidate, 120000));
+}
+
+async function safeReadJson(response: Response) {
+  const clone = response.clone();
+  return clone.json();
+}
+
+function extractIflytekTranscript(source: unknown): string | null {
+  if (!source) return null;
+
+  if (typeof source === "string") {
+    const decoded = decodeIflytekString(source);
+    if (decoded === null) {
+      return null;
+    }
+    if (typeof decoded === "string") {
+      return decoded.trim() || null;
+    }
+    return extractFromIflytekObject(decoded);
+  }
+
+  if (typeof source === "object") {
+    return extractFromIflytekObject(source as Record<string, unknown>);
+  }
+
+  return null;
+}
+
+function decodeIflytekString(value: string): string | Record<string, unknown> | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const jsonDecoded = tryParseJson(trimmed);
+  if (jsonDecoded !== null) {
+    return jsonDecoded;
+  }
+
+  if (looksLikeBase64(trimmed)) {
+    try {
+      const decoded = Buffer.from(trimmed, "base64").toString("utf-8");
+      const parsed = tryParseJson(decoded);
+      if (parsed !== null) {
+        return parsed;
+      }
+      if (decoded.trim()) {
+        return decoded.trim();
+      }
+    } catch (error) {
+      console.warn("[voice] 无法解析讯飞返回的 Base64 文本：", error);
+    }
+  }
+
+  return trimmed;
+}
+
+function tryParseJson(value: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeBase64(value: string) {
+  if (value.length < 8 || value.length % 4 !== 0) {
+    return false;
+  }
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(value);
+}
+
+function extractFromIflytekObject(obj: Record<string, unknown>): string | null {
+  if (!obj) return null;
+
+  const asResult = obj.result ?? obj;
+  if (typeof asResult === "string") {
+    return asResult.trim() || null;
+  }
+
+  if (typeof asResult === "object" && asResult !== null) {
+    const resultObj = asResult as {
+      ws?: Array<{
+        cw?: Array<{ w?: string }>;
+      }>;
+      text?: string;
+    };
+
+    if (Array.isArray(resultObj.ws)) {
+      const transcript = resultObj.ws
+        .map((wsItem) => wsItem.cw?.map((candidate) => candidate.w ?? "").join("") ?? "")
+        .join("");
+      if (transcript.trim()) {
+        return transcript.trim();
+      }
+    }
+
+    if (typeof resultObj.text === "string" && resultObj.text.trim()) {
+      return resultObj.text.trim();
+    }
+  }
+
+  return null;
 }
