@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { getPlaywrightBypassToken } from "@/lib/test-flags";
 import type { VoiceRecorderMeta, VoiceUploadResponse } from "@/types/voice";
 
 type UploadState = "idle" | "uploading" | "success" | "error";
@@ -44,6 +45,21 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [transcript, setTranscript] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const bypassToken = useMemo(() => getPlaywrightBypassToken(), []);
+  const effectiveSessionToken = sessionToken ?? bypassToken;
+  const stopStreamTracks = useCallback(() => {
+    if (!mediaStreamRef.current) return;
+    mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+  }, []);
+
+  const cleanupMedia = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
+    stopStreamTracks();
+  }, [stopStreamTracks]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -82,15 +98,6 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
   }, [cleanupMedia]);
 
   const statusText = useMemo(() => {
-    if (phase === "preparing") {
-      return "正在请求麦克风权限...";
-    }
-    if (phase === "recording") {
-      return `录制中 · ${formatDuration(elapsedMs)}`;
-    }
-    if (phase === "recorded") {
-      return `录制完成 · ${formatDuration(recordedDuration)}`;
-    }
     if (uploadState === "uploading") {
       return "正在上传并识别...";
     }
@@ -99,6 +106,15 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
     }
     if (uploadState === "error") {
       return "识别失败，请重试";
+    }
+    if (phase === "preparing") {
+      return "正在请求麦克风权限...";
+    }
+    if (phase === "recording") {
+      return `录制中 · ${formatDuration(elapsedMs)}`;
+    }
+    if (phase === "recorded") {
+      return `录制完成 · ${formatDuration(recordedDuration)}`;
     }
     return "准备就绪";
   }, [phase, elapsedMs, uploadState, recordedDuration]);
@@ -218,7 +234,7 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
       });
       return;
     }
-    if (!sessionToken) {
+    if (!effectiveSessionToken) {
       toast({
         title: "尚未登录",
         description: "请登录后再上传语音内容。",
@@ -241,7 +257,7 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
       const response = await fetch("/api/voice-inputs", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${sessionToken}`,
+          Authorization: `Bearer ${effectiveSessionToken}`,
         },
         body: formData,
       });
@@ -271,20 +287,6 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
       });
     }
   };
-
-  const stopStreamTracks = useCallback(() => {
-    if (!mediaStreamRef.current) return;
-    mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-    mediaStreamRef.current = null;
-  }, []);
-
-  const cleanupMedia = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-    }
-    mediaRecorderRef.current = null;
-    stopStreamTracks();
-  }, [stopStreamTracks]);
 
   return (
     <section

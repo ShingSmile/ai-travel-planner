@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import "@amap/amap-jsapi-types";
-import AMapLoader from "@amap/amap-jsapi-loader";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
@@ -113,13 +112,18 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
       return;
     }
 
-    let destroyed = false;
+    if (typeof window === "undefined") {
+      return;
+    }
 
+    let destroyed = false;
     setLoading(true);
     setError(null);
 
-    AMapLoader.load(loaderOptions)
-      .then((amap) => {
+    const loadMap = async () => {
+      try {
+        const { default: loader } = await import("@amap/amap-jsapi-loader");
+        const amap = await loader.load(loaderOptions);
         if (destroyed) return;
 
         amapRef.current = amap;
@@ -136,13 +140,15 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
         }) as AMapGeocoder;
 
         setLoading(false);
-      })
-      .catch((reason) => {
+      } catch (reason) {
         console.error("[TripMap] 初始化高德地图失败", reason);
         if (destroyed) return;
         setError("加载高德地图失败，请稍后重试。");
         setLoading(false);
-      });
+      }
+    };
+
+    loadMap();
 
     return () => {
       destroyed = true;

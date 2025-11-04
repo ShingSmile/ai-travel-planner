@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { VoiceRecorder } from "@/components/voice/voice-recorder";
+import { getPlaywrightBypassToken } from "@/lib/test-flags";
 
 type TravelerDraft = {
   name: string;
@@ -21,6 +22,7 @@ export default function PlannerNewPage() {
   const router = useRouter();
   const { toast } = useToast();
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const bypassToken = useMemo(() => getPlaywrightBypassToken(), []);
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
@@ -40,11 +42,21 @@ export default function PlannerNewPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (bypassToken) {
+      setSessionToken(bypassToken);
+      setLoadingSession(false);
+      return;
+    }
+    if (!supabase) {
+      setLoadingSession(false);
+      setSessionToken(null);
+      return;
+    }
     supabase.auth.getSession().then(({ data }) => {
       setSessionToken(data.session?.access_token ?? null);
       setLoadingSession(false);
     });
-  }, [supabase]);
+  }, [supabase, bypassToken]);
 
   const handleAddTraveler = () => {
     setTravelers((prev) => [...prev, { name: "", role: "" }]);
@@ -97,7 +109,8 @@ export default function PlannerNewPage() {
     event.preventDefault();
     if (loadingSession) return;
 
-    if (!sessionToken) {
+    const effectiveSessionToken = sessionToken ?? bypassToken;
+    if (!effectiveSessionToken) {
       toast({
         title: "尚未登录",
         description: "请先登录以保存行程规划。",
@@ -148,7 +161,7 @@ export default function PlannerNewPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${sessionToken}`,
+          Authorization: `Bearer ${effectiveSessionToken}`,
         },
         body: JSON.stringify(payload),
       });

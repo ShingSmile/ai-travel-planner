@@ -1,8 +1,17 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const bypassToken =
+  process.env.NEXT_PUBLIC_PLAYWRIGHT_BYPASS_AUTH ??
+  process.env.PLAYWRIGHT_BYPASS_AUTH ??
+  "playwright-bypass-token";
+
 const e2eEnv = {
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:54321",
   NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "public-anon-key",
+  NEXT_PUBLIC_PLAYWRIGHT_BYPASS_AUTH: bypassToken,
+  PLAYWRIGHT_BYPASS_AUTH: bypassToken,
+  SUPABASE_URL: process.env.SUPABASE_URL ?? "http://127.0.0.1:54321",
+  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "service-role-key",
 };
 
 export default defineConfig({
@@ -27,6 +36,7 @@ export default defineConfig({
     timeout: 120 * 1000,
     stdout: "ignore",
     stderr: "pipe",
+    env: e2eEnv,
   },
   projects: [
     {

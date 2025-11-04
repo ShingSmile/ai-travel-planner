@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { TripMap } from "@/components/trip/trip-map";
 import { TripBudgetSummary, type NormalizedBudget } from "@/components/trip/trip-budget";
 import { TripExpensesPanel } from "@/components/trip/trip-expenses";
+import { getPlaywrightBypassToken } from "@/lib/test-flags";
 
 type TripDetail = {
   id: string;
@@ -95,6 +96,7 @@ const activityTypeLabel: Record<string, string> = {
 
 export default function TripDetailPage({ params }: { params: { tripId: string } }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const bypassToken = useMemo(() => getPlaywrightBypassToken(), []);
   const { toast } = useToast();
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -119,6 +121,11 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
   const currencyFallback = budgetSummary?.currency ?? "CNY";
 
   useEffect(() => {
+    if (bypassToken) {
+      setSessionToken(bypassToken);
+      setLoadingSession(false);
+      return;
+    }
     if (!supabase) {
       setSessionToken(null);
       setLoadingSession(false);
@@ -128,16 +135,17 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
       setSessionToken(data.session?.access_token ?? null);
       setLoadingSession(false);
     });
-  }, [supabase]);
+  }, [supabase, bypassToken]);
 
   const fetchTripDetails = useCallback(async () => {
-    if (!sessionToken) return;
+    const token = sessionToken ?? bypassToken;
+    if (!token) return;
     setLoadingTrip(true);
     setLoadError(null);
     try {
       const response = await fetch(`/api/trips/${params.tripId}`, {
         headers: {
-          Authorization: `Bearer ${sessionToken}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -162,7 +170,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
     } finally {
       setLoadingTrip(false);
     }
-  }, [params.tripId, sessionToken, toast]);
+  }, [params.tripId, sessionToken, toast, bypassToken]);
 
   useEffect(() => {
     if (loadingSession) return;
@@ -204,7 +212,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
   }, [trip]);
 
   useEffect(() => {
-    if (!sessionToken || !trip || !supabase) return;
+    if (!sessionToken || !trip || !supabase || bypassToken) return;
 
     const dayIds = new Set(trip.days.map((day) => day.id));
     if (dayIds.size === 0) return;
@@ -245,7 +253,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
       }
       supabase!.removeChannel(channel);
     };
-  }, [supabase, trip, sessionToken, fetchTripDetails]);
+  }, [supabase, trip, sessionToken, fetchTripDetails, bypassToken]);
 
   useEffect(() => {
     if (!trip) {

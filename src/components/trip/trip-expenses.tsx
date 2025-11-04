@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { VoiceRecorder } from "@/components/voice/voice-recorder";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPlaywrightBypassToken } from "@/lib/test-flags";
 
 type ExpenseItem = {
   id: string;
@@ -51,6 +52,7 @@ export function TripExpensesPanel({
   plannedBudget = null,
 }: TripExpensesPanelProps) {
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const bypassToken = useMemo(() => getPlaywrightBypassToken(), []);
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -80,14 +82,16 @@ export function TripExpensesPanel({
 
   const currency = summary?.currency ?? (form.currency || currencyFallback);
 
+  const effectiveSessionToken = sessionToken ?? bypassToken;
+
   const fetchExpenses = useCallback(async () => {
-    if (!sessionToken) return;
+    if (!effectiveSessionToken) return;
     setLoading(true);
     setFetchError(null);
     try {
       const response = await fetch(`/api/expenses?tripId=${tripId}`, {
         headers: {
-          Authorization: `Bearer ${sessionToken}`,
+          Authorization: `Bearer ${effectiveSessionToken}`,
         },
         cache: "no-store",
       });
@@ -108,12 +112,12 @@ export function TripExpensesPanel({
     } finally {
       setLoading(false);
     }
-  }, [sessionToken, tripId]);
+  }, [effectiveSessionToken, tripId]);
 
   useEffect(() => {
-    if (!sessionToken || !supabase) return;
+    if (!effectiveSessionToken || !supabase || bypassToken) return;
     fetchExpenses();
-  }, [sessionToken, supabase, fetchExpenses]);
+  }, [effectiveSessionToken, supabase, fetchExpenses, bypassToken]);
 
   useEffect(() => {
     if (!plannedBudget || plannedBudget <= 0) {
@@ -153,7 +157,7 @@ export function TripExpensesPanel({
   }, [summary, plannedBudget, toast, budgetNotice]);
 
   useEffect(() => {
-    if (!sessionToken || !supabase) return;
+    if (!effectiveSessionToken || !supabase || bypassToken) return;
 
     let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -187,7 +191,7 @@ export function TripExpensesPanel({
       }
       supabase!.removeChannel(channel);
     };
-  }, [supabase, sessionToken, tripId, fetchExpenses]);
+  }, [supabase, effectiveSessionToken, tripId, fetchExpenses, bypassToken]);
 
   const handleFormChange = (patch: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...patch }));
@@ -195,7 +199,7 @@ export function TripExpensesPanel({
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!sessionToken) {
+    if (!effectiveSessionToken) {
       toast({
         title: "尚未登录",
         description: "请先登录后再记录费用。",
@@ -228,7 +232,7 @@ export function TripExpensesPanel({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${sessionToken}`,
+          Authorization: `Bearer ${effectiveSessionToken}`,
         },
         body: JSON.stringify({
           tripId,
@@ -268,7 +272,7 @@ export function TripExpensesPanel({
     }
   };
 
-  if (!sessionToken) {
+  if (!effectiveSessionToken) {
     return (
       <section className="space-y-4 rounded-3xl border border-border bg-surface p-6 text-center shadow-card">
         <h2 className="text-lg font-semibold text-foreground">费用记录</h2>
@@ -320,7 +324,7 @@ export function TripExpensesPanel({
       )}
 
       <VoiceRecorder
-        sessionToken={sessionToken}
+        sessionToken={effectiveSessionToken}
         meta={{ purpose: "expense", tripId }}
         onRecognized={(payload) => {
           setForm((prev) => ({

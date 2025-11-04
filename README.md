@@ -152,6 +152,14 @@ docker compose up --build
 
 ---
 
+## 语音识别测试场景
+
+- 设置 `PLAYWRIGHT_BYPASS_AUTH`（可为 `1`/`true` 或自定义 token）后，可访问 `/test/voice-scenarios`，该页面复刻新建行程与费用面板的语音录入交互，便于端到端测试驱动。
+- Playwright 配置默认注入 `PLAYWRIGHT_BYPASS_AUTH=playwright-bypass-token`，并 Mock `/api/voice-inputs` 接口返回，确保在沙箱环境无需真实语音服务即可验证成功与失败链路。
+- 若在生产或演示环境无需该页面，可省略上述变量，路由将返回 404。
+
+---
+
 ## 常见问题
 
 1. **无法获取 Supabase 客户端？**  
@@ -164,7 +172,7 @@ docker compose up --build
    确认高德 Key 已添加当前域名至 Referer 白名单，且 JS SDK 正常加载。
 
 4. **Playwright 测试卡住？**  
-   需提前启动 Supabase（或在 `.env.test` 中配置可用的后端服务），确保 `PLAYWRIGHT_BASE_URL` 与本地地址一致。
+   需提前启动 Supabase（或在 `.env.test` 中配置可用的后端服务），并设置 `PLAYWRIGHT_BYPASS_AUTH` 以启用语音测试页面，确保 `PLAYWRIGHT_BASE_URL` 与本地地址一致。
 
 ---
 
