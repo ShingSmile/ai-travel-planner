@@ -75,11 +75,16 @@ npm run dev
 | `SUPABASE_JWT_SECRET`                       | Supabase JWT 签名用 secret  | 与 Supabase 项目保持一致            |
 | `BAILIAN_API_KEY` / `BAILIAN_MODEL`         | 大模型访问凭证              | 兼容 OpenAI 格式                    |
 | `NEXT_PUBLIC_AMAP_KEY` / `AMAP_REST_KEY`    | 高德 JS SDK 与 Web 服务密钥 | 前端需配置 Referer 白名单           |
-| `VOICE_RECOGNIZER_PROVIDER`                 | 语音识别提供商              | 默认 `mock`，可切换 `iflytek` 等    |
+| `VOICE_RECOGNIZER_PROVIDER`                 | 语音识别提供商              | 默认 `mock`，可切换 `openai` 等     |
+| `VOICE_RECOGNIZER_TIMEOUT_MS`               | 语音识别超时时间（毫秒）    | 默认 `45000`                        |
+| `VOICE_RECOGNIZER_MOCK_TRANSCRIPT`          | Mock 识别返回文本           | 本地快速演示可填写                  |
+| `OPENAI_API_KEY` / `OPENAI_VOICE_MODEL`     | OpenAI 语音识别凭证与模型   | 例：`gpt-4o-mini-transcribe`        |
 | `SMTP_HOST` 等                              | 邮件通知配置                | 启用预算提醒或行程提醒时必填        |
 | `GLOBAL_API_RATE_LIMIT_*`                   | 全局限流参数                | 毫秒窗口 & 最大次数，可在生产调优   |
 
 更多字段（如 NextAuth、Playwright 绕过凭证）可参考 `.env.example` 注释。
+
+当 `VOICE_RECOGNIZER_PROVIDER` 设置为 `openai` 时，请同时提供 `OPENAI_API_KEY`/`OPENAI_API_BASE_URL`（默认 `https://api.openai.com/v1`）与 `OPENAI_VOICE_MODEL`，示例模型为 `gpt-4o-mini-transcribe`。如需回退 mock 行为，可改回 `mock` 或设置 `VOICE_RECOGNIZER_MOCK_TRANSCRIPT` 以快速演示。
 
 ---
 

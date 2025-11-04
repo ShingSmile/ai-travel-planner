@@ -125,11 +125,16 @@
    - 录音组件提供状态（录制中/上传/完成）、噪音提示
 2. **后端**：
    - 将音频上传至 Supabase Storage 暂存
-   - 调用语音 API（讯飞 REST）获取文本，存入 `voice_inputs`
+   - 按 `VOICE_RECOGNIZER_PROVIDER` 调用真实服务：目前接入 OpenAI Whisper（`openai`），同时保留 `mock` 降级
    - 对识别文本进行意图解析，自动填充表单或新增费用条目
 3. **容错**：
    - 识别失败时提示重试
    - 支持手动编辑识别结果
+   - 通过 `VOICE_RECOGNIZER_TIMEOUT_MS` 控制 API 超时（默认 45s），超时返回友好提示
+
+> 配置说明：
+> - `VOICE_RECOGNIZER_PROVIDER=mock` 时，使用本地示例文本；改为 `openai` 后需提供 `OPENAI_API_KEY`、`OPENAI_VOICE_MODEL`（示例：`gpt-4o-mini-transcribe`）及可选 `OPENAI_API_BASE_URL`。
+> - 可设置 `VOICE_RECOGNIZER_MOCK_TRANSCRIPT` 方便演示环境返回固定文案。
 
 ## 10. 地图与路线
 - 引入高德 JS SDK，配置安全密钥与 referer 白名单
@@ -333,7 +338,7 @@
 
 ## 22. 代理执行任务清单（顺序完成）
 
-> **执行进度提醒**：任务 1-26 已完成（最新完成任务 26：最终检查与交付），全部任务圆满收官。
+> **执行进度提醒**：任务 1-27 已完成（最新完成任务 27：接入 OpenAI 语音识别服务），继续推进后续交付。
 
 1. **需求确认与环境检查**
    - 阅读实现指南，列出所有外部服务账号需求。
@@ -417,3 +422,19 @@
     - 自测：运行 `npm run lint` 确保代码规范；记录 E2E 依赖（需 Supabase + Playwright）供验收者复现。
     - 测试报告：在 `docs/test-report.md` 汇总自动化与手动检查结果，标明环境依赖与潜在风险。
     - 交付物：确认 `docs/output/*.pdf`、Docker 镜像构建指令、README 操作指南齐备，可据此发布最终 Release。
+27. ✅ **语音识别服务接入**（已完成：接入 OpenAI Whisper 转写 API 并保留 mock 降级）
+    - 在 `src/lib/voice/recognizer.ts` 中实现基于 `OPENAI_API_KEY` 的真实调用，支持超时控制与错误处理。
+    - 识别结果统一回填 Supabase 与前端，并保留 `VOICE_RECOGNIZER_PROVIDER=mock` 的降级开关。
+    - 更新 `.env.example`、`.env.docker` 与 README，补充 OpenAI 配置项与超时说明。
+28. **语音识别体验验证**
+    - 编写/更新 Playwright 端到端用例，覆盖行程备注语音录入与费用语音录入的成功路径与失败回退。
+    - 在 `docs/test-report.md` 记录实际测试截图或日志，确保语音识别结果稳定、延迟可接受（目标 <5s）。
+    - 审查用户提示与错误文案，保证在语音服务不可用时提供可操作的降级指引。
+29. **我的行程列表页**
+    - 新增 `/trips` 页面，调用 `GET /api/trips` 展示当前用户全部行程，支持状态筛选、搜索与最近更新时间排序。
+    - 添加跳转入口（新建、详情、分享），并在导航和生成完成后回流到列表页，确保可直观管理多份行程。
+    - 补充空态、加载态与错误提示，保证在无行程或接口异常时的可用性。
+30. **多行程管理自测**
+    - 为新建行程后显示在列表页、从列表进入详情页等核心路径编写 Playwright 测试。
+    - 在 `docs/test-report.md` 记录手动/自动测试结果，确认多行程管理在桌面与移动视口表现正常。
+    - 审查 README/指南，补充“我的行程”页面的使用说明与截图。
