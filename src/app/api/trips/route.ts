@@ -11,6 +11,7 @@ const listQuerySchema = z.object({
     .pipe(z.number().int().min(1).max(50))
     .optional(),
   status: z.enum(["draft", "generating", "ready", "archived"]).optional(),
+  search: z.string().trim().min(1).max(60).optional(),
 });
 
 const travelerSchema = z.object({
@@ -50,18 +51,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { limit, status } = parsedQuery.data;
+    const { limit, status, search } = parsedQuery.data;
 
     let query = supabase
       .from("trips")
       .select(
-        "id, title, destination, start_date, end_date, status, budget, created_at, updated_at"
+        "id, title, destination, start_date, end_date, status, budget, tags, created_at, updated_at"
       )
+      .order("updated_at", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(limit ?? 20);
 
     if (status) {
       query = query.eq("status", status);
+    }
+
+    if (search) {
+      const sanitized = search.replace(/[%_]/g, (match) => `\\${match}`);
+      const likePattern = `%${sanitized}%`;
+      query = query.or(`title.ilike.${likePattern},destination.ilike.${likePattern}`);
     }
 
     const { data, error } = await query;
