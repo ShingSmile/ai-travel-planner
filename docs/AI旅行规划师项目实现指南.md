@@ -333,7 +333,7 @@
 
 ## 22. 代理执行任务清单（顺序完成）
 
-> **执行进度提醒**：任务 1-24 已完成（最新完成任务 24：文档与示例数据），下一步将进入任务 25。
+> **执行进度提醒**：任务 1-25 已完成（最新完成任务 25：PDF 交付物），下一步将进入任务 26。
 
 1. **需求确认与环境检查**
    - 阅读实现指南，列出所有外部服务账号需求。
@@ -409,9 +409,10 @@
     - README：新增快速开始、环境变量说明、脚本、Docker 部署、CI 策略与常见问题；保持中文叙述保证交付完整性。
     - 环境变量：在仓库根目录创建 `.env.example`，对关键密钥给出默认值与注释（含 LLM、地图、语音、通知等配置）。
     - 示例数据：在 `docs/examples/sample-trip.json` 提供台北 3 日行程示例，覆盖预算拆分、每日活动、费用细节，便于演示与测试。
-25. **PDF 交付物**
-    - 使用 `md-to-pdf` 或 `pandoc` 生成 PDF，包含 README 与仓库链接。
-    - 核对交付要求（Docker 镜像可下载、API Key 有效性说明）。
+25. ✅ **PDF 交付物**（已完成：新增 `scripts/export-pdfs.mjs`，基于 Playwright+marked 生成 README 与实现指南 PDF，并输出到 `docs/output/`）
+    - 脚本：运行 `npm run export:pdf` 自动渲染 Markdown → HTML → PDF，首次需执行 `npm install` 与 `npx playwright install chromium`。
+    - 产物：`docs/output/README.pdf` 与 `docs/output/AI旅行规划师项目实现指南.pdf`；脚本在受限环境下可加 `--with-escalated_permissions` 保证浏览器启动。
+    - 文档：README 新增操作说明，提醒生成的 PDF 在交付前打包提交给评审。
 26. **最终检查与交付**
     - 自测关键流程，整理测试报告。
     - 生成最终 release，上传 Docker 镜像文件与 PDF。

@@ -85,14 +85,33 @@ npm run dev
 
 ## 常用脚本
 
-| 命令               | 描述                                        |
-| ------------------ | ------------------------------------------- |
-| `npm run dev`      | 启动开发服务器（http://localhost:3000）     |
-| `npm run build`    | 构建生产包                                  |
-| `npm run start`    | 以生产模式运行                              |
-| `npm run lint`     | ESLint + Prettier 校验                      |
-| `npm run test:e2e` | Playwright 端到端测试（会自动拉起本地服务） |
-| `npm run format`   | 使用 Prettier 全量格式化                    |
+| 命令                 | 描述                                                           |
+| -------------------- | -------------------------------------------------------------- |
+| `npm run dev`        | 启动开发服务器（http://localhost:3000）                        |
+| `npm run build`      | 构建生产包                                                     |
+| `npm run start`      | 以生产模式运行                                                 |
+| `npm run lint`       | ESLint + Prettier 校验                                         |
+| `npm run test:e2e`   | Playwright 端到端测试（会自动拉起本地服务）                    |
+| `npm run export:pdf` | 生成 README 与实现指南的 PDF（首次需下载 Playwright Chromium） |
+| `npm run format`     | 使用 Prettier 全量格式化                                       |
+
+---
+
+## PDF 导出
+
+执行以下命令会将 `README.md` 与 `docs/AI旅行规划师项目实现指南.md` 转换为 PDF，输出至 `docs/output/` 目录：
+
+```bash
+# 首次运行前请确保安装依赖并下载浏览器
+npm install
+npx playwright install chromium
+
+npm run export:pdf
+```
+
+- 输出文件包含 `docs/output/README.pdf` 与 `docs/output/AI旅行规划师项目实现指南.pdf`。
+- 受限环境（如 Codex CLI sandbox）若无法启动浏览器，可在执行命令时申请 `with_escalated_permissions` 权限。
+- 可在交付前打包上传，确保评审无需依赖仓库即可阅读。
 
 ---
 
