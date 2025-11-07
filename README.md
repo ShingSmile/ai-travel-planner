@@ -141,6 +141,15 @@ docker compose up --build
 
 - **示例行程 JSON**：`docs/examples/sample-trip.json`，可用于调试 `/api/trips` 或导入前端状态。
 - 建议在 README/PDF 中配合应用实际页面截图，展示行程列表、详情、地图与费用面板（可保存在 `docs/screenshots/`）。
+- **我的行程页面截图**：`docs/screenshots/my-trips-overview.png`（展示筛选、搜索与列表卡片状态，提交前请更新为最新 UI）。
+
+## 我的行程页面使用提示
+
+1. 顶部提供「草稿/生成中/已生成/已归档」快捷筛选，可与关键字搜索同时使用；默认根据更新时间倒序展示。
+2. 右上角的「新建行程」与「刷新列表」按钮分别跳转到 `/planner/new` 与重新请求 `/api/trips`；在移动端同样可见。
+3. 列表卡片包含预算、出行日期与标签等摘要，并内置「查看详情 / 分享 / 继续生成」操作；卡片异常时会显示空态和重试提示。
+4. 若用户未登录，会展示登录/注册引导卡片；Playwright 或演示环境可通过 `PLAYWRIGHT_BYPASS_AUTH` 注入 bypass token 直接访问。
+5. 多端展示或截图时，可参照 `docs/screenshots/my-trips-overview.png`，确保包含筛选条、操作按钮与至少两个不同行程状态。
 
 ---
 

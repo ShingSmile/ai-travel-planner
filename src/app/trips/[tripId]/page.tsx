@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,7 +94,8 @@ const activityTypeLabel: Record<string, string> = {
   accommodation: "住宿",
 };
 
-export default function TripDetailPage({ params }: { params: { tripId: string } }) {
+export default function TripDetailPage({ params }: { params: Promise<{ tripId: string }> }) {
+  const { tripId } = use(params);
   const supabase = useMemo(() => getSupabaseClient(), []);
   const bypassToken = useMemo(() => getPlaywrightBypassToken(), []);
   const { toast } = useToast();
@@ -143,7 +144,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
     setLoadingTrip(true);
     setLoadError(null);
     try {
-      const response = await fetch(`/api/trips/${params.tripId}`, {
+      const response = await fetch(`/api/trips/${tripId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -170,7 +171,7 @@ export default function TripDetailPage({ params }: { params: { tripId: string } 
     } finally {
       setLoadingTrip(false);
     }
-  }, [params.tripId, sessionToken, toast, bypassToken]);
+  }, [tripId, sessionToken, toast, bypassToken]);
 
   useEffect(() => {
     if (loadingSession) return;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,8 @@ interface GenerationResponse {
   attempts: number;
 }
 
-export default function TripGeneratePage({ params }: { params: { tripId: string } }) {
+export default function TripGeneratePage({ params }: { params: Promise<{ tripId: string }> }) {
+  const { tripId } = use(params);
   const supabase = useMemo(() => getSupabaseClient(), []);
   const { toast } = useToast();
   const router = useRouter();
@@ -44,6 +45,11 @@ export default function TripGeneratePage({ params }: { params: { tripId: string 
   const progressTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (!supabase) {
+      setSessionToken(null);
+      setLoadingSession(false);
+      return;
+    }
     supabase.auth
       .getSession()
       .then(({ data }) => {
@@ -92,7 +98,7 @@ export default function TripGeneratePage({ params }: { params: { tripId: string 
             Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify({
-            tripId: params.tripId,
+            tripId,
             forceRegenerate: force,
           }),
         });
@@ -128,7 +134,7 @@ export default function TripGeneratePage({ params }: { params: { tripId: string 
         });
       }
     },
-    [clearProgressTimer, params.tripId, sessionToken, toast]
+    [clearProgressTimer, tripId, sessionToken, toast]
   );
 
   useEffect(() => {
@@ -154,7 +160,7 @@ export default function TripGeneratePage({ params }: { params: { tripId: string 
   };
 
   const handleViewTrip = () => {
-    router.push(`/trips/${params.tripId}`);
+    router.push(`/trips/${tripId}`);
   };
 
   return (
