@@ -10,6 +10,8 @@ import { useToast } from "@/components/ui/toast";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { VoiceRecorder } from "@/components/voice/voice-recorder";
 import { getPlaywrightBypassToken } from "@/lib/test-flags";
+import { TripIntentAssistant } from "@/components/planner/trip-intent-assistant";
+import type { TripIntentDraft, TripIntentTravelParty } from "@/types/trip-intent";
 
 type TravelerDraft = {
   name: string;
@@ -103,6 +105,53 @@ export default function PlannerNewPage() {
     setNotes("");
     setTags([]);
     setFormError(null);
+  };
+
+  const handleApplyTripIntent = (draft: TripIntentDraft) => {
+    if (draft.destinations.length > 0) {
+      setDestination(draft.destinations[0]);
+      if (!title.trim()) {
+        setTitle(`${draft.destinations[0]}行`);
+      }
+    }
+
+    if (draft.dateRange?.startDate) {
+      setStartDate(draft.dateRange.startDate);
+    }
+    if (draft.dateRange?.endDate) {
+      setEndDate(draft.dateRange.endDate);
+    }
+
+    if (draft.budget?.amount) {
+      setBudget(String(draft.budget.amount));
+    }
+
+    if (draft.preferences.length > 0) {
+      setTags((prev) => Array.from(new Set([...prev, ...draft.preferences])));
+    }
+
+    if (draft.travelParty) {
+      const travelerDrafts = buildTravelersFromParty(draft.travelParty);
+      if (travelerDrafts.length > 0) {
+        setTravelers(travelerDrafts);
+      }
+    }
+
+    setNotes((previous) => {
+      if (!previous?.trim()) {
+        return draft.rawInput;
+      }
+      if (previous.includes(draft.rawInput)) {
+        return previous;
+      }
+      return `${previous.trim()}\n${draft.rawInput}`;
+    });
+
+    toast({
+      title: "已根据语音/文本填充表单",
+      description: "请确认各字段信息，可继续手动修改。",
+      variant: "success",
+    });
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -326,19 +375,22 @@ export default function PlannerNewPage() {
             </div>
           </div>
 
-          <VoiceRecorder
-            sessionToken={sessionToken}
-            meta={{ purpose: "trip_notes" }}
-            onRecognized={(payload) => {
-              if (!payload?.transcript) return;
-              setNotes((previous) => {
-                if (!previous?.trim()) {
-                  return payload.transcript;
-                }
-                return `${previous.trim()}\n${payload.transcript}`;
-              });
-            }}
-          />
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground/90">语音速记（备注）</label>
+            <VoiceRecorder
+              sessionToken={sessionToken}
+              meta={{ purpose: "trip_notes" }}
+              onRecognized={(payload) => {
+                if (!payload?.transcript) return;
+                setNotes((previous) => {
+                  if (!previous?.trim()) {
+                    return payload.transcript;
+                  }
+                  return `${previous.trim()}\n${payload.transcript}`;
+                });
+              }}
+            />
+          </div>
 
           <TextArea
             label="补充说明"
@@ -362,18 +414,41 @@ export default function PlannerNewPage() {
         </form>
       </section>
 
-      <aside className="space-y-4 rounded-3xl border border-dashed border-border/70 bg-surface/80 p-6 shadow-card">
-        <h2 className="text-lg font-semibold">表单小贴士</h2>
-        <ul className="space-y-3 text-sm text-muted">
-          <li>· 行程标题和目的地将作为行程卡片的主要信息，请准确填写。</li>
-          <li>· 预算字段支持留空，系统将基于 LLM 输出估算各类别支出。</li>
-          <li>· 标签可用于仪表盘筛选，例如“亲子”“城市漫游”。</li>
-          <li>· 提交后会返回草稿状态，可在详情页继续完善行程与预算。</li>
-        </ul>
-        <div className="rounded-2xl bg-primary/10 p-4 text-sm text-primary">
-          Tips：后续迭代将支持语音输入、日历导入等快捷方式，欢迎持续关注。
+      <aside className="space-y-6">
+        <TripIntentAssistant sessionToken={sessionToken} onApply={handleApplyTripIntent} />
+        <div className="space-y-4 rounded-3xl border border-dashed border-border/70 bg-surface/80 p-6 shadow-card">
+          <h2 className="text-lg font-semibold">表单小贴士</h2>
+          <ul className="space-y-3 text-sm text-muted">
+            <li>· 行程标题和目的地将作为行程卡片的主要信息，请准确填写。</li>
+            <li>· 预算字段支持留空，系统将基于 LLM 输出估算各类别支出。</li>
+            <li>· 标签可用于仪表盘筛选，例如“亲子”“城市漫游”。</li>
+            <li>· 提交后会返回草稿状态，可在详情页继续完善行程与预算。</li>
+          </ul>
+          <div className="rounded-2xl bg-primary/10 p-4 text-sm text-primary">
+            Tips：语音/文本助手可快速填充行程基础信息，确保字段完整度更高。
+          </div>
         </div>
       </aside>
     </div>
   );
+}
+
+function buildTravelersFromParty(party: TripIntentTravelParty) {
+  if (!party?.total) {
+    return [];
+  }
+  const safeTotal = Math.min(Math.max(party.total, 1), 12);
+  const kids = Math.min(party.kids ?? (party.hasKids ? 1 : 0), safeTotal);
+  const adults = Math.max(safeTotal - kids, 0);
+  const next: TravelerDraft[] = [];
+
+  for (let i = 0; i < adults; i += 1) {
+    next.push({ name: "", role: "成人" });
+  }
+
+  for (let i = 0; i < kids; i += 1) {
+    next.push({ name: "", role: "孩子" });
+  }
+
+  return next.length > 0 ? next : [{ name: "", role: "" }];
 }

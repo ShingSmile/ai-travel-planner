@@ -62,7 +62,7 @@
 - **后端**：Next.js API Routes 或独立 Node.js（Express/NestJS），包容边缘函数部署
 - **数据库**：Supabase PostgreSQL（含 Auth、Storage、Edge Functions）
 - **AI 服务**：优先阿里云百炼（助教可用），备用 OpenAI / DeepSeek；使用 LangChain/自研 Prompt 模板
-- **语音识别**：科大讯飞 Web API；若使用阿里云，可走 NLS SDK
+- **语音识别**：科大讯飞语音听写（流式 WebSocket）；若使用阿里云，可走 NLS SDK
 - **地图**：高德地图 JS API (Web)+ Web 服务接口（POI、路线）
 - **容器化**：Docker + docker-compose，本地开发配合 Supabase CLI 或 Docker
 - **CI/CD**：GitHub Actions（格式检查、测试、构建 Docker 镜像并推送）
@@ -125,7 +125,7 @@
    - 录音组件提供状态（录制中/上传/完成）、噪音提示
 2. **后端**：
    - 将音频上传至 Supabase Storage 暂存
-   - 按 `VOICE_RECOGNIZER_PROVIDER` 调用真实服务：目前接入科大讯飞 WebAPI（`iflytek`），同时保留 `mock` 降级与 `openai` 备选
+   - 按 `VOICE_RECOGNIZER_PROVIDER` 调用真实服务：目前接入科大讯飞语音听写流式 WebSocket（`iflytek`），同时保留 `mock` 降级与 `openai` 备选
    - 对识别文本进行意图解析，自动填充表单或新增费用条目
 3. **容错**：
    - 识别失败时提示重试
@@ -133,7 +133,7 @@
    - 通过 `VOICE_RECOGNIZER_TIMEOUT_MS` 控制 API 超时（默认 45s），超时返回友好提示
 
 > 配置说明：
-> - `VOICE_RECOGNIZER_PROVIDER=iflytek` 时，需要配置 `IFLYTEK_APP_ID`、`IFLYTEK_API_KEY`、`IFLYTEK_API_SECRET` 及可选参数（引擎、语种、口音等）。
+> - `VOICE_RECOGNIZER_PROVIDER=iflytek` 时，需要配置 `IFLYTEK_APP_ID`、`IFLYTEK_API_KEY`、`IFLYTEK_API_SECRET` 并启用讯飞“语音听写·流式 WebSocket”接口；可通过 `IFLYTEK_DOMAIN`、`IFLYTEK_LANGUAGE`、`IFLYTEK_ACCENT` 等参数控制领域与语种。
 > - `VOICE_RECOGNIZER_PROVIDER=openai` 可作为备选方案，需提供 `OPENAI_API_KEY`、`OPENAI_VOICE_MODEL` 等。
 > - `VOICE_RECOGNIZER_PROVIDER=mock` 时，可通过 `VOICE_RECOGNIZER_MOCK_TRANSCRIPT` 设置固定演示文案。
 
@@ -423,8 +423,8 @@
     - 自测：运行 `npm run lint` 确保代码规范；记录 E2E 依赖（需 Supabase + Playwright）供验收者复现。
     - 测试报告：在 `docs/test-report.md` 汇总自动化与手动检查结果，标明环境依赖与潜在风险。
     - 交付物：确认 `docs/output/*.pdf`、Docker 镜像构建指令、README 操作指南齐备，可据此发布最终 Release。
-27. ✅ **语音识别服务接入**（已完成：接入科大讯飞 WebAPI 并保留 mock/openai 降级）
-    - 在 `src/lib/voice/recognizer.ts` 中实现基于讯飞 WebAPI 的鉴权签名、请求封装与结果解析。
+27. ✅ **语音识别服务接入**（已完成：接入科大讯飞流式 WebSocket 并保留 mock/openai 降级）
+    - 在 `src/lib/voice/recognizer.ts` 中实现基于讯飞流式接口的鉴权、分片推送与结果解析。
     - 识别结果统一回填 Supabase 与前端，支持 `iflytek`、`mock`、`openai` 三种模式灵活切换。
     - 更新 `.env.example`、`.env.docker` 与 README，补充讯飞参数说明及可选的 OpenAI 备选配置。
 28. ✅ **语音识别体验验证**（已完成：新增语音测试场景页与 Playwright 用例，验证成功/失败链路并补充测试记录）
@@ -440,3 +440,15 @@
     - 新增 `tests/e2e/my-trips.spec.ts`，覆盖「创建行程 -> 跳转生成页」以及「我的行程列表 → 详情页」两条链路（Mock `/api/trips` 与 `/api/trips/:id` 响应）。
     - 调整 `/trips/[tripId]` 与 `/trips/[tripId]/generate` 客户端页面以兼容 Next.js 19+ 传递异步 `params`，确保测试与真实环境均可加载。
     - 在 README 增补「我的行程页面使用提示」小节，并明确截图存放于 `docs/screenshots/my-trips-overview.png`；同时在本指南和 `docs/test-report.md` 中记录对应测试与验证结果。
+31. ✅ **语音/文本行程需求解析**（已完成：TripIntentAssistant + 本地解析器，语音/文本可一键填表）
+    - 新增 `src/types/trip-intent.ts` 与 `src/lib/trip-intent/parser.ts`，通过目的地词典+正则组合拆解目的地、日期/天数、预算、同行人数、偏好等字段，并计算字段置信度。
+    - `/planner/new` 右侧引入 `TripIntentAssistant`（语音+文本双入口），实时展示拆解结果、置信度条以及缺失字段提示，并支持保留原描述。
+    - 「应用到表单」会自动写入目的地、预算、标签及同行人草稿（成人/儿童拆分），同时将原始描述追加到备注，提示用户继续补齐未解析字段。
+32. **行程需求解析服务（待开发）**
+    - 新增 `POST /api/trip-intents`，负责接收 transcript 或自由文本，调用 LLM 或规则引擎输出结构化 JSON（目的地数组、出行日期/天数、预算金额+币种、同行人数、偏好标签）。
+    - 为解析服务定义 JSON Schema 与正则兜底逻辑（如通过金额/天数关键词提取），并将结果落库 `trip_intents` 表（字段：`user_id`, `raw_input`, `structured_payload JSONB`, `confidence`, `source`）。
+    - 与 `voice_inputs` 关联：语音识别完成后自动调用解析服务，成功则回填表单并记录链路状态；失败时返回友好提示并允许继续手动填写。
+33. **联调与验证（待开发）**
+    - 编写单元测试覆盖解析器的关键场景（预算单位、出行天数 vs 日期、同行描述含孩子/老人等）。
+    - Playwright 补充端到端用例：语音上传→自动填表→提交行程；文本粘贴→解析失败回退；验证表单联动与提示文案。
+    - 监控与埋点：在解析入口埋点记录成功率、平均耗时、字段缺失率，为后续优化提供依据；出现高错误率时在仪表盘给出降级提示（改为手动填写）。
