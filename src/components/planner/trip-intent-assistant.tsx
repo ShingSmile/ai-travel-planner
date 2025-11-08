@@ -8,6 +8,7 @@ import { VoiceRecorder } from "@/components/voice/voice-recorder";
 import { useToast } from "@/components/ui/toast";
 import type { TripIntentDraft, TripIntentSource } from "@/types/trip-intent";
 import { cn } from "@/lib/utils";
+import { collectMissingFields, trackTripIntentEvent } from "@/lib/analytics";
 
 interface TripIntentAssistantProps {
   sessionToken: string | null;
@@ -19,7 +20,44 @@ export function TripIntentAssistant({ sessionToken, onApply }: TripIntentAssista
   const [draft, setDraft] = useState<TripIntentDraft | null>(null);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recentFailures, setRecentFailures] = useState(0);
+  const [lastDurationMs, setLastDurationMs] = useState<number | null>(null);
   const { toast } = useToast();
+
+  const recordSuccess = (
+    intent: TripIntentDraft,
+    meta: { source: TripIntentSource; durationMs?: number; silent?: boolean }
+  ) => {
+    setDraft(intent);
+    setRawInput(intent.rawInput);
+    setRecentFailures(0);
+    setLastDurationMs(meta.durationMs ?? 0);
+    trackTripIntentEvent({
+      source: meta.source,
+      success: true,
+      durationMs: meta.durationMs ?? 0,
+      missingFields: collectMissingFields(intent),
+      confidence: intent.confidence,
+    });
+    if (!meta.silent) {
+      toast({
+        title: "解析完成",
+        description: "可在下方查看拆解结果并选择应用到表单。",
+        variant: "success",
+      });
+    }
+  };
+
+  const recordFailure = (source: TripIntentSource, durationMs: number, message: string) => {
+    setRecentFailures((prev) => prev + 1);
+    trackTripIntentEvent({
+      source,
+      success: false,
+      durationMs,
+      missingFields: [],
+      errorMessage: message,
+    });
+  };
 
   const runParser = async (params: {
     source: TripIntentSource;
@@ -43,6 +81,7 @@ export function TripIntentAssistant({ sessionToken, onApply }: TripIntentAssista
       return;
     }
 
+    const startedAt = performance.now();
     try {
       setProcessing(true);
       setError(null);
@@ -65,19 +104,22 @@ export function TripIntentAssistant({ sessionToken, onApply }: TripIntentAssista
       }
 
       const intent = payload.data.intent as TripIntentDraft;
-      setDraft(intent);
-      setRawInput(target);
-      if (!params.silentSuccess) {
-        toast({
-          title: "解析完成",
-          description: "可在下方查看拆解结果并选择应用到表单。",
-          variant: "success",
-        });
-      }
+      const durationMs = Math.round(performance.now() - startedAt);
+      recordSuccess(intent, {
+        source: params.source,
+        durationMs,
+        silent: params.silentSuccess,
+      });
     } catch (parserError) {
       console.error("[TripIntentAssistant] parse error:", parserError);
       setDraft(null);
       setError(parserError instanceof Error ? parserError.message : "解析失败，请修改描述后重试。");
+      const durationMs = Math.round(performance.now() - startedAt);
+      recordFailure(
+        params.source,
+        durationMs,
+        parserError instanceof Error ? parserError.message : "parse_error"
+      );
     } finally {
       setProcessing(false);
     }
@@ -131,6 +173,11 @@ export function TripIntentAssistant({ sessionToken, onApply }: TripIntentAssista
             清空
           </Button>
         </div>
+        {lastDurationMs !== null && draft && (
+          <p className="text-xs text-muted">
+            最近一次解析耗时 {lastDurationMs} ms，置信度 {Math.round(draft.confidence * 100)}%
+          </p>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -141,13 +188,7 @@ export function TripIntentAssistant({ sessionToken, onApply }: TripIntentAssista
           onRecognized={(payload) => {
             if (!payload?.transcript) return;
             if (payload.tripIntent) {
-              setDraft(payload.tripIntent);
-              setRawInput(payload.tripIntent.rawInput);
-              toast({
-                title: "解析完成",
-                description: "语音内容已自动拆解，可直接应用到表单。",
-                variant: "success",
-              });
+              recordSuccess(payload.tripIntent, { source: "voice", durationMs: 0, silent: false });
               return;
             }
             runParser({
@@ -161,6 +202,11 @@ export function TripIntentAssistant({ sessionToken, onApply }: TripIntentAssista
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+      {recentFailures >= 2 && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+          解析多次失败，可先手动填写表单字段，或稍后在网络更佳时重试。
+        </div>
+      )}
 
       {draft && (
         <div className="space-y-4 rounded-2xl border border-dashed border-primary/40 bg-primary/5 p-4">

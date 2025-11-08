@@ -4,6 +4,7 @@
 - `npm run lint`：通过（2025-11-04，macOS sandbox 环境）。
 - `npx playwright test tests/e2e/voice-recorder.spec.ts`：通过（2025-11-04，本地启用 `PLAYWRIGHT_BYPASS_AUTH=1`，Mock 讯飞接口验证语音识别成功/失败链路）。
 - `npx playwright test tests/e2e/my-trips.spec.ts`：通过（2025-11-05，沙箱启用 `PLAYWRIGHT_BYPASS_AUTH=1`，Mock `/api/trips` 与 `/api/trips/:id` 以覆盖列表与详情路径）。
+- `npx playwright test tests/e2e/trip-intent-assistant.spec.ts`：通过（2025-11-08，本地启用 `PLAYWRIGHT_BYPASS_AUTH=1`，Mock `/api/trip-intents` 与 `/api/voice-inputs`，验证文本/语音解析自动填表体验与回退文案）。
 - `npm run test:e2e`：未执行。原因：Playwright 测试依赖运行中 Supabase 实例与可用凭证，当前沙箱未配置；验收时建议在本地或 CI 启动 Supabase（`supabase start`）后执行。
 
 ## 手动验证

@@ -450,7 +450,7 @@
     - 新增 `supabase/migrations/20241115_add_trip_intents.sql` 建表，字段涵盖 `structured_payload`、`field_confidences`、`confidence`、`voice_input_id`，并启用 RLS + 更新时间触发器。
     - 提供 `POST /api/trip-intents`（`src/app/api/trip-intents/route.ts`），校验 `rawInput/source/voiceInputId`，复用 `parseTripIntent` 生成结构化 JSON，调用 `persistTripIntentDraft` 入库并返回 `TripIntentDraft`。
     - `/api/voice-inputs` 在 `purpose=trip_notes` 时自动串联解析服务，语音识别成功即写入 `trip_intents` 并把 `tripIntent` 随响应返回，方便前端快速回填。
-33. **联调与验证（待开发）**
-    - 编写单元测试覆盖解析器的关键场景（预算单位、出行天数 vs 日期、同行描述含孩子/老人等）。
-    - Playwright 补充端到端用例：语音上传→自动填表→提交行程；文本粘贴→解析失败回退；验证表单联动与提示文案。
-    - 监控与埋点：在解析入口埋点记录成功率、平均耗时、字段缺失率，为后续优化提供依据；出现高错误率时在仪表盘给出降级提示（改为手动填写）。
+33. ✅ **联调与验证**（已完成：前/后端埋点、解析 UI 兜底、Playwright 端到端用例）
+    - `TripIntentAssistant` 新增 sendBeacon 埋点（`src/lib/analytics.ts`），在成功/失败时记录耗时、缺失字段、错误原因，并在解析多次失败时显示提示卡片引导用户改用手动填写/稍后重试；`NEXT_PUBLIC_TRIP_INTENT_ANALYTICS_ENDPOINT` 可选上报到外部日志服务。
+    - 语音路径支持携带 `tripIntent` 直达前端，`/planner/new` 侧栏自动展示拆解结果并可应用到表单；新增体验指标（最近一次解析耗时/置信度）帮助调试。
+    - 新增 `tests/e2e/trip-intent-assistant.spec.ts` 覆盖「文本解析→应用填表」与「语音上传→自动拆解」全链路，并抽离 `tests/e2e/utils/voice.ts` 复用语音 Mock；`docs/test-report.md` 已记录最新执行结论。

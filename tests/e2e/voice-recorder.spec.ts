@@ -1,101 +1,5 @@
-import { test, expect, Page, Route } from "@playwright/test";
-
-async function setupMediaRecorderMocks(page: Page) {
-  await page.addInitScript(() => {
-    class FakeMediaStream {
-      getTracks() {
-        return [
-          {
-            stop() {
-              /* noop */
-            },
-          },
-        ];
-      }
-    }
-
-    class FakeMediaRecorder extends EventTarget {
-      public mimeType: string;
-      public state: "inactive" | "recording" = "inactive";
-      private chunk: Blob | null = null;
-
-      constructor(stream: FakeMediaStream, options?: MediaRecorderOptions) {
-        super();
-        void stream;
-        this.mimeType = options?.mimeType ?? "audio/webm";
-      }
-
-      static isTypeSupported() {
-        return true;
-      }
-
-      start() {
-        this.state = "recording";
-        this.chunk = new Blob(["mock audio content"], { type: this.mimeType });
-      }
-
-      stop() {
-        if (this.state === "inactive") return;
-        this.state = "inactive";
-
-        const dataEvent = new Event("dataavailable");
-        Object.defineProperty(dataEvent, "data", {
-          value: this.chunk ?? new Blob(["mock"], { type: this.mimeType }),
-        });
-        this.dispatchEvent(dataEvent);
-
-        const stopEvent = new Event("stop");
-        this.dispatchEvent(stopEvent);
-      }
-    }
-
-    Object.defineProperty(window, "MediaRecorder", {
-      configurable: true,
-      writable: true,
-      value: FakeMediaRecorder,
-    });
-
-    if (!navigator.mediaDevices) {
-      Object.defineProperty(navigator, "mediaDevices", {
-        configurable: true,
-        writable: true,
-        value: {},
-      });
-    }
-
-    navigator.mediaDevices.getUserMedia = async () => new FakeMediaStream();
-  });
-}
-
-async function mockVoiceSuccess(route: Route, transcript: string) {
-  await route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      success: true,
-      data: {
-        voiceInputId: "voice-mock-success",
-        transcript,
-        intent: "trip_notes",
-        expenseDraft: null,
-      },
-    }),
-  });
-}
-
-async function mockVoiceFailure(route: Route, message: string) {
-  await route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      success: false,
-      error: {
-        message,
-        code: "voice_provider_error",
-      },
-    }),
-  });
-}
+import { test, expect } from "@playwright/test";
+import { setupMediaRecorderMocks, mockVoiceSuccess, mockVoiceFailure } from "./utils/voice";
 
 test.describe("语音识别体验验证", () => {
   test.beforeEach(async ({ page }) => {
@@ -107,7 +11,7 @@ test.describe("语音识别体验验证", () => {
 
     await page.route("**/api/voice-inputs", async (route) => {
       if (route.request().method() === "POST") {
-        await mockVoiceSuccess(route, transcript);
+        await mockVoiceSuccess(route, { transcript });
         return;
       }
       await route.continue();

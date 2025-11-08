@@ -44,14 +44,25 @@ cp .env.example .env.local
 ### 4. 初始化 Supabase
 
 ```bash
+# 首次使用 Supabase CLI（仅需一次）
+supabase login                # 会打开浏览器完成授权
+supabase init                 # 生成 supabase/config.toml
+# 如需将本地目录绑定到远程项目，执行（可选）
+supabase link --project-ref <your-project-ref>
+
 # 启动本地服务（可选）
 supabase start
 
-# 将 schema 推送到本地或远程 Supabase 实例
-supabase db push --file supabase/migrations/20241102_init_schema.sql
+# 将 migrations 目录中的全部 SQL 推送到当前 Supabase 实例
+supabase db push
+
+# 或仅执行指定 SQL（例如直接对远程项目运行）
+supabase db execute --file supabase/migrations/20241102_init_schema.sql
 ```
 
 > 若未使用 Supabase CLI，可登录 Supabase 控制台，在 SQL Editor 执行迁移脚本。
+>
+> ⚠️ 语音录制/上传依赖 Supabase Storage 中名为 `voice-inputs` 的公共 bucket 以及对应 RLS 策略，相关 SQL 已包含在 `supabase/migrations/20241114_add_voice_storage.sql`。拉取最新代码后请重新执行 `supabase db push`（或在控制台运行该脚本），否则 `/api/voice-inputs` 会在写入 Storage 时返回 `storage_upload_failed` → 前端看到 “音频上传失败，请稍后重试”。
 
 ### 5. 启动开发服务器
 
@@ -67,26 +78,30 @@ npm run dev
 
 完整示例见 `.env.example`。常用键位说明如下：
 
-| 变量                                                        | 说明                        | 备注                                       |
-| ----------------------------------------------------------- | --------------------------- | ------------------------------------------ |
-| `SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL`                 | Supabase 项目 URL           | 本地默认为 `http://127.0.0.1:54321`        |
-| `SUPABASE_SERVICE_ROLE_KEY`                                 | 服务端密钥                  | 仅后端使用，务必避免泄露                   |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`                             | 前端匿名密钥                | 一级权限，仍需安全存储                     |
-| `SUPABASE_JWT_SECRET`                                       | Supabase JWT 签名用 secret  | 与 Supabase 项目保持一致                   |
-| `BAILIAN_API_KEY` / `BAILIAN_MODEL`                         | 大模型访问凭证              | 兼容 OpenAI 格式                           |
-| `NEXT_PUBLIC_AMAP_KEY` / `AMAP_REST_KEY`                    | 高德 JS SDK 与 Web 服务密钥 | 前端需配置 Referer 白名单                  |
-| `VOICE_RECOGNIZER_PROVIDER`                                 | 语音识别提供商              | 默认 `mock`，可切换 `iflytek`/`openai`     |
-| `IFLYTEK_APP_ID` / `IFLYTEK_API_KEY` / `IFLYTEK_API_SECRET` | 讯飞语音识别凭证            | `VOICE_RECOGNIZER_PROVIDER=iflytek` 时必填 |
-| `IFLYTEK_ENGINE_TYPE` 等                                    | 讯飞识别参数（可选）        | 默认 `intelligent_general`、`raw`、`zh_cn` |
-| `VOICE_RECOGNIZER_TIMEOUT_MS`                               | 语音识别超时时间（毫秒）    | 默认 `45000`                               |
-| `VOICE_RECOGNIZER_MOCK_TRANSCRIPT`                          | Mock 识别返回文本           | 本地快速演示可填写                         |
-| `OPENAI_API_KEY` / `OPENAI_VOICE_MODEL`                     | OpenAI 语音识别凭证与模型   | 例：`gpt-4o-mini-transcribe`               |
-| `SMTP_HOST` 等                                              | 邮件通知配置                | 启用预算提醒或行程提醒时必填               |
-| `GLOBAL_API_RATE_LIMIT_*`                                   | 全局限流参数                | 毫秒窗口 & 最大次数，可在生产调优          |
+| 变量                                                              | 说明                               | 备注                                                 |
+| ----------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------- |
+| `SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL`                       | Supabase 项目 URL                  | 本地默认为 `http://127.0.0.1:54321`                  |
+| `SUPABASE_SERVICE_ROLE_KEY`                                       | 服务端密钥                         | 仅后端使用，务必避免泄露                             |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`                                   | 前端匿名密钥                       | 一级权限，仍需安全存储                               |
+| `SUPABASE_JWT_SECRET`                                             | Supabase JWT 签名用 secret         | 与 Supabase 项目保持一致                             |
+| `BAILIAN_API_KEY` / `BAILIAN_MODEL`                               | 大模型访问凭证                     | 兼容 OpenAI 格式                                     |
+| `NEXT_PUBLIC_AMAP_KEY` / `AMAP_REST_KEY`                          | 高德 JS SDK 与 Web 服务密钥        | 前端需配置 Referer 白名单                            |
+| `VOICE_RECOGNIZER_PROVIDER`                                       | 语音识别提供商                     | 默认 `mock`，可切换 `iflytek`/`openai`               |
+| `IFLYTEK_APP_ID` / `IFLYTEK_API_KEY` / `IFLYTEK_API_SECRET`       | 讯飞语音听写凭证（流式 WebSocket） | `VOICE_RECOGNIZER_PROVIDER=iflytek` 时必填           |
+| `IFLYTEK_API_BASE_URL` / `IFLYTEK_DOMAIN` / `IFLYTEK_LANGUAGE` 等 | 讯飞流式参数（可选）               | 默认 `wss://iat-api.xfyun.cn/v2/iat`、`iat`、`zh_cn` |
+| `VOICE_RECOGNIZER_TIMEOUT_MS`                                     | 语音识别超时时间（毫秒）           | 默认 `45000`                                         |
+| `VOICE_RECOGNIZER_MOCK_TRANSCRIPT`                                | Mock 识别返回文本                  | 本地快速演示可填写                                   |
+| `OPENAI_API_KEY` / `OPENAI_VOICE_MODEL`                           | OpenAI 语音识别凭证与模型          | 例：`gpt-4o-mini-transcribe`                         |
+| `NEXT_PUBLIC_TRIP_INTENT_ANALYTICS_ENDPOINT`                      | 行程意图解析埋点上报地址           | 可选，若留空则仅在前端控制台缓存事件                 |
+| `SMTP_HOST` 等                                                    | 邮件通知配置                       | 启用预算提醒或行程提醒时必填                         |
+| `GLOBAL_API_RATE_LIMIT_*`                                         | 全局限流参数                       | 毫秒窗口 & 最大次数，可在生产调优                    |
 
 更多字段（如 NextAuth、Playwright 绕过凭证）可参考 `.env.example` 注释。
 
-当 `VOICE_RECOGNIZER_PROVIDER` 设置为 `iflytek` 时，请填写 `IFLYTEK_APP_ID`、`IFLYTEK_API_KEY`、`IFLYTEK_API_SECRET` 等参数；若对识别准确度有更高要求，可根据科大讯飞控制台调整 `IFLYTEK_ENGINE_TYPE`、`IFLYTEK_AUDIO_ENCODING` 等配置。需要备用方案时，可将 Provider 切换为 `openai`，并配置对应的 `OPENAI_API_KEY`/`OPENAI_VOICE_MODEL`；演示场景可使用 `mock` 并通过 `VOICE_RECOGNIZER_MOCK_TRANSCRIPT` 返回固定文本。
+当 `VOICE_RECOGNIZER_PROVIDER` 设置为 `iflytek` 时，请填写 `IFLYTEK_APP_ID`、`IFLYTEK_API_KEY`、`IFLYTEK_API_SECRET` 并确保已在讯飞控制台开通“语音听写·流式 WebSocket”接口；如需自定义识别领域或语种，可通过 `IFLYTEK_DOMAIN`（默认 `iat`）、`IFLYTEK_LANGUAGE`、`IFLYTEK_ACCENT`、`IFLYTEK_VAD_EOS` 等参数调整。需要备用方案时，可将 Provider 切换为 `openai`，并配置对应的 `OPENAI_API_KEY`/`OPENAI_VOICE_MODEL`；演示场景可使用 `mock` 并通过 `VOICE_RECOGNIZER_MOCK_TRANSCRIPT` 返回固定文本。
+
+- 已内置 `ffmpeg-static`，后端会在调用讯飞接口前自动将浏览器上传的 WebM/M4A 转码为 16k PCM；拉取代码后执行 `npm install` 才能下载对应平台的 ffmpeg 可执行文件。若部署在精简容器内，请确保具备 `libstdc++` 等基础依赖，否则转码会失败并导致 `/api/voice-inputs` 返回 502。
+- 若运行在 Alpine/Distroless 等无法直接执行 `ffmpeg-static` 的环境，请单独安装系统级 `ffmpeg` 并在环境变量中设置 `FFMPEG_PATH=/usr/bin/ffmpeg`（或对应路径），后端会优先使用该可执行文件完成转码。
 
 ---
 
@@ -166,6 +181,7 @@ docker compose up --build
 - 设置 `PLAYWRIGHT_BYPASS_AUTH`（可为 `1`/`true` 或自定义 token）后，可访问 `/test/voice-scenarios`，该页面复刻新建行程与费用面板的语音录入交互，便于端到端测试驱动。
 - Playwright 配置默认注入 `PLAYWRIGHT_BYPASS_AUTH=playwright-bypass-token`，并 Mock `/api/voice-inputs` 接口返回，确保在沙箱环境无需真实语音服务即可验证成功与失败链路。
 - 若在生产或演示环境无需该页面，可省略上述变量，路由将返回 404。
+- Chrome/Edge 下的语音录制依赖 `MediaRecorder` 与麦克风授权：请在 `https://` 或 `http://localhost` 打开页面，允许浏览器访问麦克风后再进行录制；若录制后播放没有声音，可在控制台检查 `MediaRecorder` 是否报错或使用 `navigator.mediaDevices.getUserMedia` 的测试页面确认设备是否有输入信号。
 
 ---
 
