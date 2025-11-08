@@ -89,6 +89,7 @@
 | `activities` | `id`, `trip_day_id`, `type`, `start_time`, `end_time`, `location`, `poi_id`, `cost`, `details JSONB` | 景点/餐饮/交通等活动 |
 | `expenses` | `id`, `trip_id`, `category`, `amount`, `currency`, `source`, `memo`, `created_at` | 费用记录 |
 | `voice_inputs` | `id`, `trip_id`, `user_id`, `transcript`, `audio_url`, `status` | 语音输入留存 |
+| `trip_intents` | `id`, `user_id`, `voice_input_id`, `raw_input`, `structured_payload JSONB`, `confidence`, `field_confidences JSONB`, `source` | 语音/文本描述拆解后的结构化结果，便于多端回填 |
 | `sync_logs` | `id`, `trip_id`, `change`, `created_at` | 变更日志（可驱动通知） |
 
 - 启用 RLS：仅行程拥有者可读写；支持分享可选令牌。
@@ -167,6 +168,7 @@
 | `GET` | `/api/trips/:id` | 获取单个行程详情（含活动、费用） |
 | `PATCH` | `/api/trips/:id` | 更新行程摘要、偏好 |
 | `POST` | `/api/voice-inputs` | 上传语音并触发识别 |
+| `POST` | `/api/trip-intents` | 解析语音/文本描述并生成结构化行程意图 |
 | `POST` | `/api/expenses` | 新增费用 |
 | `GET` | `/api/expenses?tripId=` | 获取费用列表 |
 | `POST` | `/api/llm/generate` | 手动触发行程生成（如重新规划） |
@@ -444,10 +446,10 @@
     - 新增 `src/types/trip-intent.ts` 与 `src/lib/trip-intent/parser.ts`，通过目的地词典+正则组合拆解目的地、日期/天数、预算、同行人数、偏好等字段，并计算字段置信度。
     - `/planner/new` 右侧引入 `TripIntentAssistant`（语音+文本双入口），实时展示拆解结果、置信度条以及缺失字段提示，并支持保留原描述。
     - 「应用到表单」会自动写入目的地、预算、标签及同行人草稿（成人/儿童拆分），同时将原始描述追加到备注，提示用户继续补齐未解析字段。
-32. **行程需求解析服务（待开发）**
-    - 新增 `POST /api/trip-intents`，负责接收 transcript 或自由文本，调用 LLM 或规则引擎输出结构化 JSON（目的地数组、出行日期/天数、预算金额+币种、同行人数、偏好标签）。
-    - 为解析服务定义 JSON Schema 与正则兜底逻辑（如通过金额/天数关键词提取），并将结果落库 `trip_intents` 表（字段：`user_id`, `raw_input`, `structured_payload JSONB`, `confidence`, `source`）。
-    - 与 `voice_inputs` 关联：语音识别完成后自动调用解析服务，成功则回填表单并记录链路状态；失败时返回友好提示并允许继续手动填写。
+32. ✅ **行程需求解析服务**（已完成：后端存储+API+语音链路联动）
+    - 新增 `supabase/migrations/20241115_add_trip_intents.sql` 建表，字段涵盖 `structured_payload`、`field_confidences`、`confidence`、`voice_input_id`，并启用 RLS + 更新时间触发器。
+    - 提供 `POST /api/trip-intents`（`src/app/api/trip-intents/route.ts`），校验 `rawInput/source/voiceInputId`，复用 `parseTripIntent` 生成结构化 JSON，调用 `persistTripIntentDraft` 入库并返回 `TripIntentDraft`。
+    - `/api/voice-inputs` 在 `purpose=trip_notes` 时自动串联解析服务，语音识别成功即写入 `trip_intents` 并把 `tripIntent` 随响应返回，方便前端快速回填。
 33. **联调与验证（待开发）**
     - 编写单元测试覆盖解析器的关键场景（预算单位、出行天数 vs 日期、同行描述含孩子/老人等）。
     - Playwright 补充端到端用例：语音上传→自动填表→提交行程；文本粘贴→解析失败回退；验证表单联动与提示文案。

@@ -120,6 +120,7 @@ const fieldWeights: Record<TripIntentFieldKey, number> = {
 export interface ParseTripIntentOptions {
   source?: TripIntentSource;
   transcriptId?: string;
+  voiceInputId?: string | null;
 }
 
 export function parseTripIntent(
@@ -162,6 +163,7 @@ export function parseTripIntent(
     id: generateDraftId(),
     source: options?.source ?? "text",
     rawInput: cleaned,
+    voiceInputId: options?.voiceInputId ?? undefined,
     destinations,
     dateRange,
     budget,
@@ -169,7 +171,7 @@ export function parseTripIntent(
     preferences,
     confidence: Number(confidence.toFixed(3)),
     fieldConfidences,
-    transcriptId: options?.transcriptId,
+    transcriptId: options?.transcriptId ?? undefined,
     createdAt: new Date().toISOString(),
   };
 }

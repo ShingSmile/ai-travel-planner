@@ -1,3 +1,5 @@
+import type { TripIntentDraft } from "@/types/trip-intent";
+
 export type VoiceIntent = "trip_notes" | "expense" | "unknown";
 
 export interface VoiceUploadResponse {
@@ -11,6 +13,7 @@ export interface VoiceUploadResponse {
     memo?: string;
     source?: string;
   };
+  tripIntent?: TripIntentDraft | null;
 }
 
 export interface VoiceRecorderMeta {

@@ -27,6 +27,7 @@ export interface TripIntentDraft {
   id: string;
   source: TripIntentSource;
   rawInput: string;
+  voiceInputId?: string;
   destinations: string[];
   dateRange?: TripIntentDateRange;
   budget?: TripIntentBudget;
@@ -36,4 +37,5 @@ export interface TripIntentDraft {
   fieldConfidences: Partial<Record<TripIntentFieldKey, number>>;
   transcriptId?: string;
   createdAt: string;
+  status?: string;
 }

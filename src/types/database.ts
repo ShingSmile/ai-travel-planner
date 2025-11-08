@@ -236,6 +236,64 @@ export interface Database {
           },
         ];
       };
+      trip_intents: {
+        Row: {
+          id: string;
+          user_id: string;
+          voice_input_id: string | null;
+          raw_input: string;
+          structured_payload: Json;
+          field_confidences: Json | null;
+          confidence: string;
+          source: string;
+          status: string;
+          error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          voice_input_id?: string | null;
+          raw_input: string;
+          structured_payload: Json;
+          field_confidences?: Json | null;
+          confidence?: string | null;
+          source?: string;
+          status?: string;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          voice_input_id?: string | null;
+          raw_input?: string;
+          structured_payload?: Json;
+          field_confidences?: Json | null;
+          confidence?: string | null;
+          source?: string;
+          status?: string;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "trip_intents_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "trip_intents_voice_input_id_fkey";
+            columns: ["voice_input_id"];
+            referencedRelation: "voice_inputs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       voice_inputs: {
         Row: {
           id: string;

@@ -5,6 +5,9 @@ import { ok, handleApiError, ApiErrorResponse } from "@/lib/api-response";
 import { requireAuthContext } from "@/lib/auth-helpers";
 import { recognizeVoice } from "@/lib/voice/recognizer";
 import { consumeRateLimit, resolveRateLimitNumber } from "@/lib/rate-limit";
+import { parseTripIntent } from "@/lib/trip-intent/parser";
+import { persistTripIntentDraft } from "@/lib/trip-intent/persist";
+import type { TripIntentDraft } from "@/types/trip-intent";
 
 const MAX_FILE_SIZE = Number(process.env.VOICE_MAX_FILE_SIZE ?? 5 * 1024 * 1024); // 5MB 默认限制
 type VoicePurpose = "trip_notes" | "expense";
@@ -150,12 +153,35 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", voiceInput.id);
 
+    let tripIntentPayload: TripIntentDraft | null = null;
+    if (purpose === "trip_notes") {
+      try {
+        const intentDraft = parseTripIntent(recognitionResult.transcript, {
+          source: "voice",
+          voiceInputId: voiceInput.id,
+          transcriptId: voiceInput.id,
+        });
+        const { intent } = await persistTripIntentDraft({
+          supabase,
+          userId: user.id,
+          rawInput: recognitionResult.transcript,
+          source: "voice",
+          voiceInputId: voiceInput.id,
+          intentDraft,
+        });
+        tripIntentPayload = intent;
+      } catch (intentError) {
+        console.warn("[voice-inputs] trip intent parse failed:", intentError);
+      }
+    }
+
     return ok(
       {
         voiceInputId: voiceInput.id,
         transcript: recognitionResult.transcript,
         intent: recognitionResult.intent,
         expenseDraft: recognitionResult.expenseDraft,
+        tripIntent: tripIntentPayload,
       },
       { headers: rateLimitResult.headers }
     );

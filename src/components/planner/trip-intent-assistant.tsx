@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { VoiceRecorder } from "@/components/voice/voice-recorder";
 import { useToast } from "@/components/ui/toast";
-import { parseTripIntent } from "@/lib/trip-intent/parser";
 import type { TripIntentDraft, TripIntentSource } from "@/types/trip-intent";
 import { cn } from "@/lib/utils";
 
@@ -22,24 +21,59 @@ export function TripIntentAssistant({ sessionToken, onApply }: TripIntentAssista
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const runParser = (source: TripIntentSource, text?: string) => {
-    const target = (text ?? rawInput).trim();
+  const runParser = async (params: {
+    source: TripIntentSource;
+    text?: string;
+    voiceInputId?: string | null;
+    silentSuccess?: boolean;
+  }) => {
+    const target = (params.text ?? rawInput).trim();
     if (!target) {
       setError("请先输入一段描述或通过语音录制。");
+      return;
+    }
+
+    if (!sessionToken) {
+      setError("请先登录再使用解析功能。");
+      toast({
+        title: "需要登录",
+        description: "请登录后再尝试自动解析行程需求。",
+        variant: "warning",
+      });
       return;
     }
 
     try {
       setProcessing(true);
       setError(null);
-      const result = parseTripIntent(target, { source });
-      setDraft(result);
-      setRawInput(target);
-      toast({
-        title: "解析完成",
-        description: "可在下方查看拆解结果并选择应用到表单。",
-        variant: "success",
+      const response = await fetch("/api/trip-intents", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionToken}`,
+        },
+        body: JSON.stringify({
+          rawInput: target,
+          source: params.source,
+          voiceInputId: params.voiceInputId ?? undefined,
+        }),
       });
+
+      const payload = await response.json();
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error?.message ?? "解析失败，请稍后再试。");
+      }
+
+      const intent = payload.data.intent as TripIntentDraft;
+      setDraft(intent);
+      setRawInput(target);
+      if (!params.silentSuccess) {
+        toast({
+          title: "解析完成",
+          description: "可在下方查看拆解结果并选择应用到表单。",
+          variant: "success",
+        });
+      }
     } catch (parserError) {
       console.error("[TripIntentAssistant] parse error:", parserError);
       setDraft(null);
@@ -73,7 +107,7 @@ export function TripIntentAssistant({ sessionToken, onApply }: TripIntentAssista
           <Button
             type="button"
             variant="primary"
-            onClick={() => runParser("text")}
+            onClick={() => runParser({ source: "text" })}
             disabled={processing}
           >
             {processing ? (
@@ -106,7 +140,22 @@ export function TripIntentAssistant({ sessionToken, onApply }: TripIntentAssista
           meta={{ purpose: "trip_notes" }}
           onRecognized={(payload) => {
             if (!payload?.transcript) return;
-            runParser("voice", payload.transcript);
+            if (payload.tripIntent) {
+              setDraft(payload.tripIntent);
+              setRawInput(payload.tripIntent.rawInput);
+              toast({
+                title: "解析完成",
+                description: "语音内容已自动拆解，可直接应用到表单。",
+                variant: "success",
+              });
+              return;
+            }
+            runParser({
+              source: "voice",
+              text: payload.transcript,
+              voiceInputId: payload.voiceInputId,
+              silentSuccess: true,
+            });
           }}
         />
       </div>
