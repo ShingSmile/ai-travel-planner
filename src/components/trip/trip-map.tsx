@@ -94,6 +94,7 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
   });
   const geocoderRef = useRef<AMapGeocoder | null>(null);
   const geocodeCacheRef = useRef<Map<string, Coordinates>>(new Map());
+  const lastSelectedIdRef = useRef<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -157,14 +158,31 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     }
   };
 
+  const focusOnSelectedMarker = () => {
+    if (!selectedActivityId || !mapRef.current) return;
+    const overlay = overlaysRef.current.markers.find(
+      (item) => item.activityId === selectedActivityId
+    );
+    if (!overlay) return;
+    const position = overlay.marker.getPosition();
+    if (!position) return;
+    const center: [number, number] = [position.getLng(), position.getLat()];
+    mapRef.current.setCenter(center);
+    if (mapRef.current.getZoom() < 14) {
+      mapRef.current.setZoom(14);
+    }
+  };
+
   const selectedSummary = selectedEntry ? getActivitySummary(selectedEntry.activity) : null;
 
   useEffect(() => {
     if (!selectedEntry) return;
-    if (visibleDayId !== "all" && selectedEntry.day.id !== visibleDayId) {
-      setVisibleDayId(selectedEntry.day.id);
+    if (lastSelectedIdRef.current === selectedEntry.activity.id) {
+      return;
     }
-  }, [selectedEntry, visibleDayId]);
+    lastSelectedIdRef.current = selectedEntry.activity.id;
+    setVisibleDayId(selectedEntry.day.id);
+  }, [selectedEntry]);
 
   useEffect(() => {
     if (!selectedActivityId) return;
@@ -387,6 +405,28 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     mapRef.current.setCenter(markerCenter);
   }, [selectedActivityId]);
 
+  useEffect(() => {
+    const highlightDayId = selectedEntry?.day.id ?? (visibleDayId !== "all" ? visibleDayId : null);
+    const hasSelection = Boolean(selectedActivityId);
+
+    overlaysRef.current.markers.forEach(({ marker, activityId }) => {
+      const active = !hasSelection || activityId === selectedActivityId;
+      marker.setOptions?.({
+        zIndex: active ? 120 : 80,
+        opacity: active ? 1 : 0.3,
+      });
+    });
+
+    overlaysRef.current.segments.forEach(({ polyline, dayId }) => {
+      const active = !highlightDayId || dayId === highlightDayId;
+      polyline.setOptions?.({
+        strokeOpacity: active ? 0.85 : 0.25,
+        strokeWeight: active ? 5 : 3,
+        zIndex: active ? 60 : 20,
+      });
+    });
+  }, [selectedActivityId, selectedEntry, visibleDayId]);
+
   return (
     <div className="space-y-3">
       <div className="rounded-2xl border border-border bg-surface/70 p-4 shadow-card">
@@ -438,48 +478,61 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
             <span>{error}</span>
           </div>
         )}
-        {!loading && !error && selectedEntry && (
-          <div className="pointer-events-auto absolute inset-x-4 bottom-4 rounded-2xl border border-border bg-background/95 p-4 text-sm shadow-card backdrop-blur">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted">
-                  {selectedEntry.day.summary ?? formatDateLabel(selectedEntry.day.date)}
-                </p>
-                <h3 className="text-base font-semibold text-foreground">
-                  {selectedEntry.orderLabel} · {getActivityName(selectedEntry.activity)}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => onActivitySelect?.(null)}
-                className="rounded-full border border-border px-3 py-1 text-xs text-muted transition hover:border-foreground hover:text-foreground"
-              >
-                清除选择
-              </button>
-            </div>
-            <dl className="mt-3 grid gap-2 text-xs text-muted sm:grid-cols-3">
-              <div>
-                <dt className="font-medium text-foreground">活动类型</dt>
-                <dd>{getActivityTypeLabel(selectedEntry.activity.type)}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">时间安排</dt>
-                <dd>{formatActivityTimeRange(selectedEntry.activity)}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">位置</dt>
-                <dd>{selectedEntry.activity.location ?? "待确认地点"}</dd>
-              </div>
-            </dl>
-            {selectedSummary && <p className="mt-2 text-xs text-muted">{selectedSummary}</p>}
-          </div>
-        )}
         {!loading && !error && !selectedEntry && (
           <div className="pointer-events-none absolute bottom-4 left-4 rounded-full bg-background/85 px-3 py-1 text-xs text-muted shadow">
             点击地图点位或活动卡片可查看详情
           </div>
         )}
       </div>
+      {selectedEntry ? (
+        <div className="rounded-2xl border border-border bg-surface/70 p-4 text-sm shadow-card">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted">
+                {selectedEntry.day.summary ?? formatDateLabel(selectedEntry.day.date)}
+              </p>
+              <h3 className="text-base font-semibold text-foreground">
+                {selectedEntry.orderLabel} · {getActivityName(selectedEntry.activity)}
+              </h3>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <button
+                type="button"
+                onClick={focusOnSelectedMarker}
+                className="rounded-full border border-border px-3 py-1 text-foreground transition hover:border-foreground"
+              >
+                在地图中定位
+              </button>
+              <button
+                type="button"
+                onClick={() => onActivitySelect?.(null)}
+                className="rounded-full border border-border px-3 py-1 text-muted transition hover:border-foreground hover:text-foreground"
+              >
+                清除选择
+              </button>
+            </div>
+          </div>
+          <dl className="mt-3 grid gap-2 text-xs text-muted sm:grid-cols-3">
+            <div>
+              <dt className="font-medium text-foreground">活动类型</dt>
+              <dd>{getActivityTypeLabel(selectedEntry.activity.type)}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-foreground">时间安排</dt>
+              <dd>{formatActivityTimeRange(selectedEntry.activity)}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-foreground">位置</dt>
+              <dd>{selectedEntry.activity.location ?? "待确认地点"}</dd>
+            </div>
+          </dl>
+          {selectedSummary && <p className="mt-2 text-xs text-muted">{selectedSummary}</p>}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-border/70 bg-background/50 px-4 py-3 text-xs text-muted">
+          小技巧：点击上方的小方框可切换到指定日期，只查看当日路线；在活动卡片或地图点位上点击，即可在此查看详细信息。
+        </div>
+      )}
       <p className="text-xs text-muted">
         温馨提示：地图点位基于当前行程位置推算，如出现偏差可在下一任务中完善 POI 数据。
       </p>

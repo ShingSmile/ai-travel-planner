@@ -73,7 +73,8 @@
 3. 集成 Tailwind CSS：`npx tailwindcss init -p`
 4. 创建 `.env.local`，包含：
    - `SUPABASE_URL`、`SUPABASE_ANON_KEY`
-   - `BAILIAN_API_KEY`（阿里云百炼），可选 `BAILIAN_API_BASE_URL`、`BAILIAN_MODEL`
+   - `LLM_PROVIDER`（`bailian`/`openai`）与 `BAILIAN_API_KEY`（或 `OPENAI_API_KEY`），如需走 `https://dashscope.aliyuncs.com/compatible-mode/v1` 只需填到 `/v1` 级别，接口会自动补 `/chat/completions`
+   - `BAILIAN_API_BASE_URL`（默认 `https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation`，兼容模式可填 `.../compatible-mode/v1`）、`BAILIAN_MODEL`
    - `NEXT_PUBLIC_AMAP_KEY`（高德 JS SDK 前端 Key）
    - `AMAP_REST_KEY`（高德 Web 服务 Key，用于 POI 与地理编码）
    - `IFLYTEK_APP_ID/KEY` 等
@@ -103,6 +104,7 @@
    - 前端提交参数 → 后端校验 → 触发 LLM
    - 若使用阿里云百炼：调用 `dashscope` SDK，选 `qwen-max` 或 `tongyi-turbo`
    - 在后端进行 JSON Schema 验证，失败时重试或回退到模板
+   - ⚠️ 兼容 OpenAI 的 `https://dashscope.aliyuncs.com/compatible-mode/v1` 仅需填写到 `/v1`，其余路径由后端自动补齐；若走第三方兼容网关请将 `LLM_PROVIDER` 设为 `openai`，否则会得到 502 错误
 3. **后处理**：
    - 拆分每日活动写入 `trip_days`、`activities`
    - 调用高德 POI 搜索补全经纬度与图片
@@ -341,7 +343,7 @@
 
 ## 22. 代理执行任务清单（顺序完成）
 
-> **执行进度提醒**：任务 1-34 已完成（最新完成任务 34：行程地图体验增强），继续推进后续交付。
+> **执行进度提醒**：任务 1-35 已完成（最新完成任务 35：行程地图交互优化），继续推进后续交付。
 
 1. **需求确认与环境检查**
    - 阅读实现指南，列出所有外部服务账号需求。
@@ -458,3 +460,7 @@
     - 地图上方新增「全部行程/按日筛选」工具栏与「重置视图」按钮，可快速聚焦单日路线并一键回到全局视角，符合第 10 节对概览/单日地图的并行展示建议。
     - 选中点位后在地图内弹出活动详情卡片，呈现活动顺位、摘要、类型、时间与地址，支持随时清除选中，弥补 POI 详情卡片需求。
     - 引入活动类型颜色图例与空态提示，帮助用户理解颜色含义，并在缺少位置信息时给出中文错误指引，保持可用性与指南推荐的友好反馈。
+35. ✅ **行程地图交互优化**（已完成：修复日期筛选失效、移除遮挡提示并强化路线高亮）
+    - 修正小方框筛选逻辑，避免已有活动选中时强制回退，点击任意日期即可只展示当日点位与路线，高亮状态清晰可见。
+    - 将活动详情移出地图叠加层，改为下方信息卡，提供「在地图中定位」「清除选择」双按钮，阅读与地图操作互不干扰。
+    - 依据当前筛选或选中活动自动调整标记与折线的不透明度/层级，突出重点路线，进一步贴合第 10 节对“地点+路线高亮”呈现的要求。
