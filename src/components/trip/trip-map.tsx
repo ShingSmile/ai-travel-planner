@@ -99,6 +99,7 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [visibleDayId, setVisibleDayId] = useState<string | "all">("all");
+  const [overlayRevision, setOverlayRevision] = useState(0);
 
   const flattenedActivities = useMemo(() => {
     return days.flatMap((day, dayIndex) => {
@@ -167,10 +168,9 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     const position = overlay.marker.getPosition();
     if (!position) return;
     const center: [number, number] = [position.getLng(), position.getLat()];
-    mapRef.current.setCenter(center);
-    if (mapRef.current.getZoom() < 14) {
-      mapRef.current.setZoom(14);
-    }
+    const zoom = Math.max(mapRef.current.getZoom() ?? 12, 14);
+    mapRef.current.setZoomAndCenter?.(zoom, center);
+    mapRef.current.panTo?.(center);
   };
 
   const selectedSummary = selectedEntry ? getActivitySummary(selectedEntry.activity) : null;
@@ -183,6 +183,12 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     lastSelectedIdRef.current = selectedEntry.activity.id;
     setVisibleDayId(selectedEntry.day.id);
   }, [selectedEntry]);
+
+  useEffect(() => {
+    if (!selectedActivityId) {
+      lastSelectedIdRef.current = null;
+    }
+  }, [selectedActivityId]);
 
   useEffect(() => {
     if (!selectedActivityId) return;
@@ -363,6 +369,7 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
 
       overlaysRef.current.segments = segments;
       mapRef.current!.setFitView(undefined, undefined, [80, 80, 80, 80]);
+      setOverlayRevision((value) => value + 1);
     };
 
     drawOverlays().catch((reason) => {
@@ -401,9 +408,9 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
       return;
     }
     const markerCenter: [number, number] = [markerPosition.getLng(), markerPosition.getLat()];
-    infoWindow.open(mapRef.current, markerCenter);
     mapRef.current.setCenter(markerCenter);
-  }, [selectedActivityId]);
+    infoWindow.open(mapRef.current, markerCenter);
+  }, [selectedActivityId, overlayRevision]);
 
   useEffect(() => {
     const highlightDayId = selectedEntry?.day.id ?? (visibleDayId !== "all" ? visibleDayId : null);
@@ -425,7 +432,7 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
         zIndex: active ? 60 : 20,
       });
     });
-  }, [selectedActivityId, selectedEntry, visibleDayId]);
+  }, [selectedActivityId, selectedEntry, visibleDayId, overlayRevision]);
 
   return (
     <div className="space-y-3">
