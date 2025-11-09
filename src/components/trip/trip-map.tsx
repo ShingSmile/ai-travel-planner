@@ -75,6 +75,15 @@ const activityTypeColor: Record<string, string> = {
   accommodation: "#7c3aed",
 };
 
+const activityTypeLabel: Record<string, string> = {
+  transport: "交通",
+  attraction: "景点/活动",
+  dining: "餐饮",
+  hotel: "酒店",
+  shopping: "购物",
+  accommodation: "住宿",
+};
+
 export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<AMap.Map | null>(null);
@@ -88,6 +97,7 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [visibleDayId, setVisibleDayId] = useState<string | "all">("all");
 
   const flattenedActivities = useMemo(() => {
     return days.flatMap((day, dayIndex) => {
@@ -103,6 +113,66 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
       }));
     });
   }, [days]);
+
+  const dayFilters = useMemo(
+    () =>
+      days.map((day, index) => ({
+        id: day.id,
+        label: `第 ${index + 1} 天`,
+        hint: day.summary ?? formatDateLabel(day.date),
+      })),
+    [days]
+  );
+
+  const filterButtons = useMemo(
+    () => [
+      {
+        id: "all",
+        label: "全部行程",
+        hint: `${days.length} 天`,
+      },
+      ...dayFilters,
+    ],
+    [dayFilters, days.length]
+  );
+
+  const filteredActivities = useMemo(() => {
+    if (visibleDayId === "all") {
+      return flattenedActivities;
+    }
+    return flattenedActivities.filter((entry) => entry.day.id === visibleDayId);
+  }, [flattenedActivities, visibleDayId]);
+
+  const selectedEntry = useMemo(() => {
+    if (!selectedActivityId) return null;
+    return flattenedActivities.find((entry) => entry.activity.id === selectedActivityId) ?? null;
+  }, [flattenedActivities, selectedActivityId]);
+
+  const handleResetView = () => {
+    if (visibleDayId !== "all") {
+      setVisibleDayId("all");
+    }
+    if (mapRef.current) {
+      mapRef.current.setFitView(undefined, undefined, [80, 80, 80, 80]);
+    }
+  };
+
+  const selectedSummary = selectedEntry ? getActivitySummary(selectedEntry.activity) : null;
+
+  useEffect(() => {
+    if (!selectedEntry) return;
+    if (visibleDayId !== "all" && selectedEntry.day.id !== visibleDayId) {
+      setVisibleDayId(selectedEntry.day.id);
+    }
+  }, [selectedEntry, visibleDayId]);
+
+  useEffect(() => {
+    if (!selectedActivityId) return;
+    const exists = filteredActivities.some((entry) => entry.activity.id === selectedActivityId);
+    if (!exists && onActivitySelect) {
+      onActivitySelect(null);
+    }
+  }, [filteredActivities, onActivitySelect, selectedActivityId]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -171,15 +241,25 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     overlaysRef.current.segments.forEach(({ polyline }) => polyline.setMap(null));
     overlaysRef.current = { markers: [], segments: [] };
 
+    if (filteredActivities.length === 0) {
+      setError(visibleDayId === "all" ? "当前行程暂无可展示的活动。" : "所选日期暂无活动内容。");
+      return;
+    }
+
     let disposed = false;
 
     const drawOverlays = async () => {
       const amap = amapRef.current;
       if (!amap) return;
 
-      const tasks = flattenedActivities.filter((entry) => {
+      const tasks = filteredActivities.filter((entry) => {
         return Boolean(entry.activity.location || extractCoordinates(entry.activity));
       });
+
+      if (tasks.length === 0) {
+        setError("当前筛选的活动缺少位置信息，无法展示地图点位。");
+        return;
+      }
 
       const resolved = await Promise.all(
         tasks.map(async (entry) => {
@@ -191,14 +271,14 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
         })
       );
 
+      if (disposed) return;
+
       const validEntries = resolved.filter(Boolean) as Array<
         (typeof tasks)[number] & { coords: Coordinates }
       >;
 
-      if (disposed || validEntries.length === 0) {
-        if (validEntries.length === 0) {
-          setError("当前行程缺少位置信息，无法展示地图点位。");
-        }
+      if (validEntries.length === 0) {
+        setError("未能获取这些活动的坐标，请稍后再试。");
         return;
       }
 
@@ -277,7 +357,7 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     return () => {
       disposed = true;
     };
-  }, [flattenedActivities, onActivitySelect]);
+  }, [filteredActivities, onActivitySelect, visibleDayId]);
 
   useEffect(() => {
     if (!mapRef.current || !amapRef.current) return;
@@ -307,25 +387,98 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     mapRef.current.setCenter(markerCenter);
   }, [selectedActivityId]);
 
-  if (loading) {
-    return (
-      <div className="flex h-64 w-full items-center justify-center rounded-3xl border border-border bg-surface shadow-card">
-        <Spinner />
-        <span className="ml-3 text-sm text-muted">正在加载地图...</span>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-2">
-      <div
-        ref={containerRef}
-        className={cn(
-          "h-80 w-full overflow-hidden rounded-3xl border border-border bg-muted/20 shadow-card",
-          error && "grid place-items-center bg-background text-sm text-muted"
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-border bg-surface/70 p-4 shadow-card">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            {filterButtons.map((option) => (
+              <button
+                type="button"
+                key={option.id}
+                onClick={() => setVisibleDayId(option.id)}
+                className={cn(
+                  "rounded-2xl border px-3 py-1 text-xs text-muted transition hover:text-foreground",
+                  visibleDayId === option.id && "border-primary/50 bg-primary/10 text-primary"
+                )}
+              >
+                <span className="font-medium">{option.label}</span>
+                <span className="ml-1 text-[11px] text-muted">{option.hint}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+            <button
+              type="button"
+              onClick={handleResetView}
+              className="rounded-full border border-border px-3 py-1 font-medium text-foreground transition hover:border-foreground"
+            >
+              重置视图
+            </button>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-muted">
+          <MapLegend />
+        </div>
+      </div>
+
+      <div className="relative h-80 w-full overflow-hidden rounded-3xl border border-border bg-muted/20 shadow-card">
+        <div
+          ref={containerRef}
+          className={cn("h-full w-full", error && "opacity-40 blur-sm", loading && "opacity-60")}
+        />
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-surface/70 backdrop-blur-sm">
+            <Spinner />
+            <span className="ml-3 text-sm text-muted">正在加载地图...</span>
+          </div>
         )}
-      >
-        {error && <span>{error}</span>}
+        {error && !loading && (
+          <div className="absolute inset-0 grid place-items-center bg-background/90 text-sm text-muted">
+            <span>{error}</span>
+          </div>
+        )}
+        {!loading && !error && selectedEntry && (
+          <div className="pointer-events-auto absolute inset-x-4 bottom-4 rounded-2xl border border-border bg-background/95 p-4 text-sm shadow-card backdrop-blur">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted">
+                  {selectedEntry.day.summary ?? formatDateLabel(selectedEntry.day.date)}
+                </p>
+                <h3 className="text-base font-semibold text-foreground">
+                  {selectedEntry.orderLabel} · {getActivityName(selectedEntry.activity)}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => onActivitySelect?.(null)}
+                className="rounded-full border border-border px-3 py-1 text-xs text-muted transition hover:border-foreground hover:text-foreground"
+              >
+                清除选择
+              </button>
+            </div>
+            <dl className="mt-3 grid gap-2 text-xs text-muted sm:grid-cols-3">
+              <div>
+                <dt className="font-medium text-foreground">活动类型</dt>
+                <dd>{getActivityTypeLabel(selectedEntry.activity.type)}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground">时间安排</dt>
+                <dd>{formatActivityTimeRange(selectedEntry.activity)}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground">位置</dt>
+                <dd>{selectedEntry.activity.location ?? "待确认地点"}</dd>
+              </div>
+            </dl>
+            {selectedSummary && <p className="mt-2 text-xs text-muted">{selectedSummary}</p>}
+          </div>
+        )}
+        {!loading && !error && !selectedEntry && (
+          <div className="pointer-events-none absolute bottom-4 left-4 rounded-full bg-background/85 px-3 py-1 text-xs text-muted shadow">
+            点击地图点位或活动卡片可查看详情
+          </div>
+        )}
       </div>
       <p className="text-xs text-muted">
         温馨提示：地图点位基于当前行程位置推算，如出现偏差可在下一任务中完善 POI 数据。
@@ -463,4 +616,65 @@ function getActivityName(activity: TripMapActivity) {
   }
   if (activity.location) return activity.location;
   return "行程活动";
+}
+
+function getActivityTypeLabel(type: string) {
+  return activityTypeLabel[type] ?? "行程活动";
+}
+
+function formatDateLabel(date: string) {
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) {
+    return date;
+  }
+  return parsed.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+}
+
+function formatActivityTimeRange(activity: TripMapActivity) {
+  const format = (value: string | null) => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toLocaleTimeString("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  };
+
+  const start = format(activity.startTime);
+  const end = format(activity.endTime);
+  if (start && end) return `${start} - ${end}`;
+  if (start && !end) return `${start} 起`;
+  if (!start && end) return `至 ${end}`;
+  return "时间未定";
+}
+
+function getActivitySummary(activity: TripMapActivity) {
+  const details = activity.details;
+  if (details && typeof details === "object") {
+    const summary = (details as Record<string, unknown>).summary;
+    if (typeof summary === "string" && summary.trim()) {
+      return summary.trim();
+    }
+  }
+  return activity.location ?? null;
+}
+
+function MapLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {Object.entries(activityTypeColor).map(([type, color]) => (
+        <span key={type} className="flex items-center gap-1">
+          <span
+            className="h-2.5 w-2.5 rounded-full"
+            style={{
+              backgroundColor: color,
+            }}
+          />
+          <span>{activityTypeLabel[type] ?? type}</span>
+        </span>
+      ))}
+    </div>
+  );
 }
