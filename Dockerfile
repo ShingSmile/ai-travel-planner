@@ -11,6 +11,7 @@ ENV PNPM_HOME="/pnpm" \
   NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 RUN apk add --no-cache ffmpeg
+ENV FFMPEG_PATH=/usr/bin/ffmpeg
 
 FROM base AS deps
 ENV NODE_ENV=development
