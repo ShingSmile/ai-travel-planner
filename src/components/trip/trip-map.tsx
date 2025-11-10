@@ -5,6 +5,14 @@ import "@amap/amap-jsapi-types";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
+declare global {
+  interface Window {
+    _AMapSecurityConfig?: {
+      securityJsCode?: string;
+    };
+  }
+}
+
 type TripMapDay = {
   id: string;
   date: string;
@@ -59,6 +67,7 @@ type AMapGeocoder = {
     address: string,
     callback: (status: GeocoderStatus, result: GeocodeResult) => void
   ) => void;
+  setCity?: (city: string) => void;
 };
 
 const loaderOptions = {
@@ -66,6 +75,7 @@ const loaderOptions = {
   version: "2.0",
   plugins: ["AMap.Geocoder"],
 };
+const loaderSecurityCode = process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE?.trim();
 
 const activityTypeColor: Record<string, string> = {
   transport: "#2563eb",
@@ -427,6 +437,13 @@ export function TripMap({ days, selectedActivityId, onActivitySelect, cityHint }
       return;
     }
 
+    if (loaderSecurityCode) {
+      window._AMapSecurityConfig = {
+        ...(window._AMapSecurityConfig ?? {}),
+        securityJsCode: loaderSecurityCode,
+      };
+    }
+
     let destroyed = false;
     const geocodeFailureSet = geocodeFailureRef.current;
     const geocodePendingSet = geocodePendingRef.current;
@@ -438,6 +455,17 @@ export function TripMap({ days, selectedActivityId, onActivitySelect, cityHint }
     const loadMap = async () => {
       try {
         const { default: loader } = await import("@amap/amap-jsapi-loader");
+        if (
+          loaderSecurityCode &&
+          typeof loader === "object" &&
+          loader !== null &&
+          "config" in loader &&
+          typeof loader.config === "function"
+        ) {
+          loader.config({
+            securityJsCode: loaderSecurityCode,
+          });
+        }
         const amap = await loader.load(loaderOptions);
         if (destroyed) return;
 
@@ -698,11 +726,12 @@ export function TripMap({ days, selectedActivityId, onActivitySelect, cityHint }
     const hasSelection = Boolean(selectedActivityId);
 
     overlaysRef.current.markers.forEach(({ marker, activityId }) => {
+      const markerWithOpacity = marker as AMap.Marker & {
+        setOpacity?: (opacity: number) => void;
+      };
       const active = !hasSelection || activityId === selectedActivityId;
-      marker.setOptions?.({
-        zIndex: active ? 120 : 80,
-        opacity: active ? 1 : 0.3,
-      });
+      marker.setzIndex(active ? 120 : 80);
+      markerWithOpacity.setOpacity?.(active ? 1 : 0.3);
     });
 
     overlaysRef.current.segments.forEach(({ polyline, dayId }) => {
@@ -1108,6 +1137,17 @@ export function TripMap({ days, selectedActivityId, onActivitySelect, cityHint }
       segments.add(stripped);
     }
 
+    const simplified = stripLocationSuffix(stripped || normalized);
+    if (simplified) {
+      segments.add(simplified);
+    }
+
+    simplified
+      .split(/[，,、;；]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .forEach((item) => segments.add(item));
+
     const parentheticalMatches = normalized.match(/（([^）]+)）|\(([^)]+)\)/g);
     if (parentheticalMatches) {
       parentheticalMatches.forEach((match) => {
@@ -1121,6 +1161,17 @@ export function TripMap({ days, selectedActivityId, onActivitySelect, cityHint }
     }
 
     return Array.from(segments);
+  }
+
+  function stripLocationSuffix(raw: string) {
+    let text = raw;
+    text = text.replace(/(入口|出入口|扶梯口|电梯口|停车场).*$/g, "");
+    text = text.replace(/([A-Z]?\d+F.*$)/gi, "");
+    text = text.replace(/(B\d+层.*$)/gi, "");
+    text = text.replace(/(地下\d+层.*$)/g, "");
+    text = text.replace(/(近.+$)/g, "");
+    text = text.replace(/[-—–]+$/g, "");
+    return text.replace(/[，,、;；。.\s]+$/g, "").trim();
   }
 }
 

@@ -159,25 +159,30 @@ alter table public.voice_inputs enable row level security;
 alter table public.sync_logs enable row level security;
 
 -- 用户只能访问自己的 profile
-create policy if not exists "用户仅能查看自己的资料"
+drop policy if exists "用户仅能查看自己的资料" on public.user_profiles;
+create policy "用户仅能查看自己的资料"
   on public.user_profiles
   for select using (auth.uid() = user_id);
 
-create policy if not exists "用户仅能更新自己的资料"
+drop policy if exists "用户仅能更新自己的资料" on public.user_profiles;
+create policy "用户仅能更新自己的资料"
   on public.user_profiles
   for update using (auth.uid() = user_id);
 
-create policy if not exists "用户自动插入自己的资料"
+drop policy if exists "用户自动插入自己的资料" on public.user_profiles;
+create policy "用户自动插入自己的资料"
   on public.user_profiles
   for insert with check (auth.uid() = user_id);
 
 -- Trips 及其子表
-create policy if not exists "仅行程拥有者可访问 trips"
+drop policy if exists "仅行程拥有者可访问 trips" on public.trips;
+create policy "仅行程拥有者可访问 trips"
   on public.trips
   for all using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
-create policy if not exists "仅行程拥有者可访问 trip_days"
+drop policy if exists "仅行程拥有者可访问 trip_days" on public.trip_days;
+create policy "仅行程拥有者可访问 trip_days"
   on public.trip_days
   for all using (
     exists (
@@ -190,7 +195,8 @@ create policy if not exists "仅行程拥有者可访问 trip_days"
     )
   );
 
-create policy if not exists "仅行程拥有者可访问 activities"
+drop policy if exists "仅行程拥有者可访问 activities" on public.activities;
+create policy "仅行程拥有者可访问 activities"
   on public.activities
   for all using (
     exists (
@@ -209,7 +215,8 @@ create policy if not exists "仅行程拥有者可访问 activities"
     )
   );
 
-create policy if not exists "仅行程拥有者可访问 expenses"
+drop policy if exists "仅行程拥有者可访问 expenses" on public.expenses;
+create policy "仅行程拥有者可访问 expenses"
   on public.expenses
   for all using (
     exists (
@@ -222,12 +229,14 @@ create policy if not exists "仅行程拥有者可访问 expenses"
     )
   );
 
-create policy if not exists "仅行程拥有者可访问 voice_inputs"
+drop policy if exists "仅行程拥有者可访问 voice_inputs" on public.voice_inputs;
+create policy "仅行程拥有者可访问 voice_inputs"
   on public.voice_inputs
   for all using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
-create policy if not exists "仅行程拥有者可访问 sync_logs"
+drop policy if exists "仅行程拥有者可访问 sync_logs" on public.sync_logs;
+create policy "仅行程拥有者可访问 sync_logs"
   on public.sync_logs
   for select using (
     exists (

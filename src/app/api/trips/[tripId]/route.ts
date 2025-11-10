@@ -55,18 +55,70 @@ export async function GET(_request: NextRequest, context: TripRouteContext) {
       throw new ApiErrorResponse("未找到对应的行程。", 404, "trip_not_found");
     }
 
-    const trip = normalizeTripPayload(data);
+    const trip = normalizeTripPayload(data as TripDetailsRow);
     return ok({ trip });
   } catch (error) {
     return handleApiError(error);
   }
 }
 
-function normalizeTripPayload(
-  raw: TripRow & {
-    trip_days: ((TripDayRow & { activities: ActivityRow[] | null }) | null)[] | null;
+export async function DELETE(_request: NextRequest, context: TripRouteContext) {
+  try {
+    const params = await context.params;
+    const parsedParams = paramsSchema.safeParse(params);
+    if (!parsedParams.success) {
+      throw new ApiErrorResponse(
+        "无效的行程 ID。",
+        400,
+        "invalid_trip_id",
+        parsedParams.error.flatten()
+      );
+    }
+
+    const { supabase, user } = await requireAuthContext();
+    const { tripId } = parsedParams.data;
+
+    const { data, error } = await supabase
+      .from("trips")
+      .delete()
+      .eq("id", tripId)
+      .eq("user_id", user.id)
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      throw new ApiErrorResponse("删除行程失败。", 500, "trip_delete_failed", error);
+    }
+
+    if (!data) {
+      throw new ApiErrorResponse("未找到对应的行程。", 404, "trip_not_found");
+    }
+
+    return ok({ deleted: true, tripId: data.id });
+  } catch (error) {
+    return handleApiError(error);
   }
-) {
+}
+
+type TripDetailsRow = Pick<
+  TripRow,
+  | "id"
+  | "title"
+  | "destination"
+  | "start_date"
+  | "end_date"
+  | "status"
+  | "budget"
+  | "budget_breakdown"
+  | "travelers"
+  | "tags"
+  | "created_at"
+  | "updated_at"
+> & {
+  trip_days: ((TripDayRow & { activities: ActivityRow[] | null }) | null)[] | null;
+};
+
+function normalizeTripPayload(raw: TripDetailsRow) {
   const days =
     raw.trip_days
       ?.filter((day): day is TripDayRow & { activities: ActivityRow[] | null } => day !== null)

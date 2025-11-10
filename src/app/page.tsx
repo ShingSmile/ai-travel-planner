@@ -1,11 +1,5 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { useToast } from "@/components/ui/toast";
-
 const featureList = [
   {
     title: "智能路线规划",
@@ -21,34 +15,59 @@ const featureList = [
   },
 ];
 
+const guideSteps = [
+  {
+    label: "探索阶段",
+    labelColor: "text-sky-500",
+    title: "挑选目的地",
+    description: "浏览灵感、收藏清单或直接输入城市，系统会记录你想要的旅行节奏与预算基线。",
+    accent: "from-sky-400/20 via-sky-500/5 to-transparent",
+    tags: ["灵感清单", "时间范围", "同行偏好"],
+  },
+  {
+    label: "创作阶段",
+    labelColor: "text-purple-500",
+    title: "生成智慧行程",
+    description: "LLM 结合既有景点库与实时数据，自动输出每日路线、交通与备选活动。",
+    accent: "from-purple-500/20 via-purple-500/5 to-transparent",
+    tags: ["LLM + DB", "交通提示", "备选方案"],
+  },
+  {
+    label: "协作阶段",
+    labelColor: "text-emerald-500",
+    title: "同步与调整",
+    description: "在地图、移动端或语音助手中修改，所有成员实时同步，预算与提醒自动更新。",
+    accent: "from-emerald-500/20 via-emerald-500/5 to-transparent",
+    tags: ["语音速记", "实时同步", "预算监控"],
+  },
+];
+
+const highlightSections = [
+  {
+    kicker: "地图联动",
+    title: "卡片与路线保持同频",
+    description:
+      "在时间轴中点击活动，可立即在地图上显示对应坐标、交通方式与步行路径，方便快速确认动线。",
+    accent: "border-primary/30 bg-primary/5",
+    bullets: ["支持多日标签切换", "可见交通段落的拥挤情况"],
+  },
+  {
+    kicker: "语音 & 识别",
+    title: "语音速记自动归档",
+    description: "边走边录音，系统实时转文字并建议插入位置；你只需确认即可落地到行程卡片。",
+    accent: "border-emerald-300/50 bg-emerald-50/30",
+    bullets: ["连续录音最长 45 秒", "支持口头预算提醒"],
+  },
+  {
+    kicker: "费用守护",
+    title: "预算阈值提醒更灵活",
+    description: "达到阈值时提醒 + 推荐替代方案，支持把高价活动标记为“稍后确认”。",
+    accent: "border-orange-300/50 bg-orange-50/30",
+    bullets: ["按项目/整日独立阈值", "可快速导出费用概览"],
+  },
+];
+
 export default function HomePage() {
-  const { toast } = useToast();
-  const [destination, setDestination] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!destination.trim()) {
-      toast({
-        title: "请输入目的地",
-        description: "例如：东京、成都、清迈等热门城市。",
-        variant: "warning",
-      });
-      return;
-    }
-
-    setLoading(true);
-    window.setTimeout(() => {
-      setLoading(false);
-      toast({
-        title: "体验示例已生成",
-        description: `${destination} 的三日行程建议已准备好，稍后可在「我的行程」查看。`,
-        variant: "success",
-      });
-      setDestination("");
-    }, 1200);
-  };
-
   return (
     <section className="grid gap-12 lg:grid-cols-[1.2fr_1fr] lg:items-start">
       <div className="space-y-10">
@@ -65,32 +84,48 @@ export default function HomePage() {
           </p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-3xl border border-border bg-surface/80 p-6 shadow-card backdrop-blur-sm"
-        >
-          <div className="flex flex-col gap-4 md:flex-row md:items-end">
-            <Input
-              label="想去哪里？"
-              placeholder="目的地城市或区域"
-              value={destination}
-              onChange={(event) => setDestination(event.target.value)}
-            />
-            <Button type="submit" className="md:min-w-[160px]" loading={loading}>
-              {loading ? (
-                <>
-                  <Spinner size="sm" />
-                  规划中...
-                </>
-              ) : (
-                "一键生成示例"
-              )}
-            </Button>
+        <div className="rounded-3xl border border-border bg-surface/80 p-6 shadow-card backdrop-blur-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                使用指南
+              </p>
+              <h2 className="mt-1 text-2xl font-semibold leading-tight">
+                三个步骤，完成一次可信赖的旅行规划
+              </h2>
+            </div>
+            <div className="rounded-full border border-primary/30 px-3 py-1 text-xs text-primary">
+              在产品 Beta 中持续完善
+            </div>
           </div>
-          <p className="mt-3 text-xs text-muted">
-            当前为演示流程，后续将接入真实 LLM 与数据库生成完整的行程数据。
-          </p>
-        </form>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {guideSteps.map((step) => (
+              <article
+                key={step.title}
+                className={`flex flex-col gap-4 rounded-2xl border border-border/60 bg-gradient-to-br ${step.accent} p-5 shadow-sm`}
+              >
+                <div className={`flex items-center gap-2 text-xs font-semibold ${step.labelColor}`}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  {step.label}
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold">{step.title}</h3>
+                  <p className="mt-2 text-sm text-muted">{step.description}</p>
+                </div>
+                <div className="mt-auto flex flex-wrap gap-2">
+                  {step.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-border/70 bg-surface/90 px-3 py-1 text-xs text-muted"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {featureList.map((feature) => (
@@ -106,15 +141,38 @@ export default function HomePage() {
       </div>
 
       <aside className="space-y-6 rounded-3xl border border-dashed border-border/70 bg-surface/70 p-6 shadow-card backdrop-blur-sm">
-        <h2 className="text-lg font-semibold">当前阶段重点</h2>
-        <ul className="space-y-3 text-sm text-muted">
-          <li>· 打造通用 UI 组件体系，确保后续功能开发一致性。</li>
-          <li>· 预置主题色与排版基线，统一品牌调性。</li>
-          <li>· 为接入 LLM、地图等模块预留组件扩展能力。</li>
-        </ul>
-        <div className="rounded-2xl bg-primary/10 p-4 text-sm text-primary">
-          Tip：点击按钮可体验 Toast 通知，后续会与真实业务流程结合。
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold">操作亮点</h2>
+          <p className="text-sm text-muted">
+            在地图、LLM 与语音模块间自由切换，保持同一份行程实时同步。挑选感兴趣的功能，直接在 Beta
+            版中体验：
+          </p>
         </div>
+        <div className="space-y-4">
+          {highlightSections.map((section) => (
+            <article
+              key={section.title}
+              className={`rounded-2xl border ${section.accent} p-5 shadow-sm`}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">
+                {section.kicker}
+              </p>
+              <h3 className="mt-2 text-base font-semibold">{section.title}</h3>
+              <p className="mt-2 text-sm text-muted">{section.description}</p>
+              <ul className="mt-3 space-y-1 text-xs text-muted">
+                {section.bullets.map((item) => (
+                  <li key={item} className="flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/50" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+        <p className="text-xs text-muted">
+          小贴士：可在「行程规划」页直接录音记笔记，系统会自动归档到对应日期。
+        </p>
       </aside>
     </section>
   );

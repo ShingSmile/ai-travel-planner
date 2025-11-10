@@ -37,6 +37,21 @@ const mockIntent = {
   status: "parsed",
 };
 
+const mockDurationIntent = {
+  ...mockIntent,
+  id: "intent-duration",
+  rawInput: "我们计划去成都玩 5 天，预算 8000。",
+  destinations: ["成都"],
+  dateRange: {
+    durationDays: 5,
+  },
+  budget: {
+    amount: 8000,
+    currency: "CNY",
+  },
+  preferences: ["美食"],
+};
+
 function getAssistantSection(page: Page) {
   return page.locator("section:has(h2:has-text('一句话描述行程，自动填表'))").first();
 }
@@ -105,5 +120,33 @@ test.describe("TripIntentAssistant", () => {
     await expect(assistant.getByText("解析结果")).toBeVisible();
     await assistant.getByRole("button", { name: "应用到表单" }).click();
     await expect(page.getByLabel("目的地")).toHaveValue("东京");
+  });
+
+  test("仅识别天数时根据已有开始日期推算结束日期", async ({ page }) => {
+    await page.route("**/api/trip-intents", async (route) => {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            intent: mockDurationIntent,
+          },
+        }),
+      });
+    });
+
+    await page.goto("/planner/new");
+    await page.getByLabel("开始日期").fill("2025-03-10");
+    await page
+      .getByPlaceholder("输入或粘贴一段旅行意图，点击解析即可自动拆解字段")
+      .fill(mockDurationIntent.rawInput);
+    await page.getByRole("button", { name: "解析文本" }).click();
+
+    const assistant = getAssistantSection(page);
+    await assistant.getByRole("button", { name: "应用到表单" }).click();
+
+    await expect(page.getByLabel("开始日期")).toHaveValue("2025-03-10");
+    await expect(page.getByLabel("结束日期")).toHaveValue("2025-03-14");
   });
 });

@@ -7,6 +7,8 @@ yarn-error.log
 .husky
 .env.local
 .env.*
+!.env.docker
+!.env.example
 supabase/.temp
 tests
 playwright-report

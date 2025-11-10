@@ -2,12 +2,13 @@ import type { NextConfig } from "next";
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://webapi.amap.com https://*.amap.com",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://webapi.amap.com https://*.amap.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.amap.com",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co https://*.supabase.in https://webapi.amap.com https://restapi.amap.com https://dashscope.aliyuncs.com",
+  "connect-src 'self' ws://localhost:* https://*.supabase.co https://*.supabase.in wss://*.supabase.co wss://*.supabase.in https://webapi.amap.com https://restapi.amap.com https://*.amap.com https://dashscope.aliyuncs.com",
   "media-src 'self' blob:",
+  "worker-src 'self' blob: https://*.amap.com",
   "frame-ancestors 'self'",
   "form-action 'self'",
   "base-uri 'self'",

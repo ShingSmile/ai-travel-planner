@@ -27,6 +27,9 @@ export default function ForgotPasswordPage() {
     try {
       setLoading(true);
       const supabase = getSupabaseClient();
+      if (!supabase) {
+        throw new Error("系统暂未配置数据服务，请稍后再试。");
+      }
       const redirectTo =
         typeof window !== "undefined" ? `${window.location.origin}/reset-password` : undefined;
       const { error } = await supabase.auth.resetPasswordForEmail(email, {

@@ -76,6 +76,7 @@
    - `LLM_PROVIDER`（`bailian`/`openai`）与 `BAILIAN_API_KEY`（或 `OPENAI_API_KEY`），如需走 `https://dashscope.aliyuncs.com/compatible-mode/v1` 只需填到 `/v1` 级别，接口会自动补 `/chat/completions`
    - `BAILIAN_API_BASE_URL`（默认 `https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation`，兼容模式可填 `.../compatible-mode/v1`）、`BAILIAN_MODEL`
    - `NEXT_PUBLIC_AMAP_KEY`（高德 JS SDK 前端 Key）
+   - `NEXT_PUBLIC_AMAP_SECURITY_CODE`（高德 JS SDK 安全密钥，开启「安全密钥」后必填）
    - `AMAP_REST_KEY`（高德 Web 服务 Key，用于 POI 与地理编码）
    - `IFLYTEK_APP_ID/KEY` 等
 5. 初始化 Supabase 项目：定义表结构、行级安全策略（RLS）

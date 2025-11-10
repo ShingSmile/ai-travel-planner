@@ -1,18 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppProviders } from "@/components/providers/app-providers";
 import Link from "next/link";
+import { AuthMenu } from "@/components/navigation/auth-menu";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const geistSans = { variable: "" };
+const geistMono = { variable: "" };
 
 export const metadata: Metadata = {
   title: "AI 旅行规划师",
@@ -46,24 +39,8 @@ export default function RootLayout({
                   <Link href="/planner/new" className="transition hover:text-foreground">
                     创建规划
                   </Link>
-                  <Link href="/docs" className="transition hover:text-foreground">
-                    使用指南
-                  </Link>
                 </nav>
-                <div className="flex items-center gap-3 text-sm font-medium">
-                  <Link
-                    href="/login"
-                    className="rounded-xl px-4 py-2 text-muted transition hover:text-foreground"
-                  >
-                    登录
-                  </Link>
-                  <Link
-                    href="/register"
-                    className="rounded-xl bg-primary px-4 py-2 text-primary-foreground shadow-sm transition hover:bg-primary/90"
-                  >
-                    注册体验
-                  </Link>
-                </div>
+                <AuthMenu />
               </div>
             </header>
             <main className="flex-1">

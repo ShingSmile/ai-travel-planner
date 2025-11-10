@@ -33,8 +33,12 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const isUnmountedRef = useRef(false);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const recorderMimeRef = useRef<string | null>(null);
   const recordStartRef = useRef<number | null>(null);
+  const stopTimeoutRef = useRef<number | null>(null);
+  const hasFinalizedRef = useRef(false);
   const [phase, setPhase] = useState<"idle" | "preparing" | "recording" | "recorded">("idle");
   const [recordedDuration, setRecordedDuration] = useState(0);
   const [supported, setSupported] = useState(false);
@@ -60,6 +64,57 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
     mediaRecorderRef.current = null;
     stopStreamTracks();
   }, [stopStreamTracks]);
+
+  const clearStopTimeout = useCallback(() => {
+    if (stopTimeoutRef.current !== null) {
+      window.clearTimeout(stopTimeoutRef.current);
+      stopTimeoutRef.current = null;
+    }
+  }, []);
+
+  const finalizeRecording = useCallback(
+    (recorder: MediaRecorder | null) => {
+      if (hasFinalizedRef.current) {
+        return;
+      }
+      hasFinalizedRef.current = true;
+      clearStopTimeout();
+
+      if (isUnmountedRef.current) {
+        stopStreamTracks();
+        return;
+      }
+
+      const effectiveMime = recorder?.mimeType || recorderMimeRef.current || "audio/webm";
+      if (chunksRef.current.length === 0) {
+        setErrorMessage("未捕获到有效音频，请重新录制。");
+        setPhase("idle");
+        recordStartRef.current = null;
+        stopStreamTracks();
+        return;
+      }
+
+      const blob = new Blob(chunksRef.current, { type: effectiveMime });
+      setAudioBlob(blob);
+      setMimeType(effectiveMime);
+
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+      }
+      const newUrl = URL.createObjectURL(blob);
+      audioUrlRef.current = newUrl;
+      setAudioUrl(newUrl);
+
+      const startedAt = recordStartRef.current;
+      const durationMs = typeof startedAt === "number" ? Math.max(0, Date.now() - startedAt) : 0;
+      setRecordedDuration(durationMs);
+      setElapsedMs(durationMs);
+      setPhase("recorded");
+      recordStartRef.current = null;
+      stopStreamTracks();
+    },
+    [clearStopTimeout, stopStreamTracks]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -87,15 +142,26 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
   }, [phase, recordedDuration]);
 
   useEffect(() => {
+    // React 18+ 在严格模式下会多次触发生命周期，确保重新挂载后标记被重置。
+    isUnmountedRef.current = false;
+
     return () => {
       isUnmountedRef.current = true;
+      clearStopTimeout();
       if (audioUrlRef.current) {
         URL.revokeObjectURL(audioUrlRef.current);
         audioUrlRef.current = null;
       }
       cleanupMedia();
     };
-  }, [cleanupMedia]);
+  }, [cleanupMedia, clearStopTimeout]);
+
+  useEffect(() => {
+    if (!audioUrl || !audioElementRef.current) return;
+    audioElementRef.current.pause();
+    audioElementRef.current.currentTime = 0;
+    audioElementRef.current.load();
+  }, [audioUrl]);
 
   const statusText = useMemo(() => {
     if (uploadState === "uploading") {
@@ -134,6 +200,9 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
       setErrorMessage(null);
       setTranscript(null);
       setUploadState("idle");
+      hasFinalizedRef.current = false;
+      recorderMimeRef.current = null;
+      clearStopTimeout();
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
@@ -143,6 +212,7 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
 
       const recorder = new MediaRecorder(stream, chosenMime ? { mimeType: chosenMime } : undefined);
       mediaRecorderRef.current = recorder;
+      recorderMimeRef.current = chosenMime || null;
       chunksRef.current = [];
 
       recorder.addEventListener("dataavailable", (event) => {
@@ -152,29 +222,7 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
       });
 
       recorder.addEventListener("stop", () => {
-        if (isUnmountedRef.current) {
-          stopStreamTracks();
-          return;
-        }
-        const blob = new Blob(chunksRef.current, {
-          type: recorder.mimeType || chosenMime || "audio/webm",
-        });
-        setAudioBlob(blob);
-        setMimeType(recorder.mimeType || chosenMime || "audio/webm");
-        if (audioUrlRef.current) {
-          URL.revokeObjectURL(audioUrlRef.current);
-        }
-        const newUrl = URL.createObjectURL(blob);
-        audioUrlRef.current = newUrl;
-        setAudioUrl(newUrl);
-        const startedAt = recordStartRef.current;
-        const durationMs =
-          typeof startedAt === "number" ? Date.now() - startedAt : elapsedMs || recordedDuration;
-        setRecordedDuration(durationMs);
-        setElapsedMs(durationMs);
-        setPhase("recorded");
-        recordStartRef.current = null;
-        stopStreamTracks();
+        finalizeRecording(recorder);
       });
 
       recorder.start();
@@ -200,9 +248,37 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
 
   const stopRecording = () => {
     const recorder = mediaRecorderRef.current;
-    if (!recorder) return;
-    if (recorder.state !== "inactive") {
+    if (!recorder) {
+      toast({
+        title: "暂无进行中的录音",
+        description: "请先点击“开始录音”。",
+        variant: "warning",
+      });
+      return;
+    }
+
+    if (recorder.state === "inactive") {
+      finalizeRecording(recorder);
+      return;
+    }
+
+    try {
       recorder.stop();
+      clearStopTimeout();
+      stopTimeoutRef.current = window.setTimeout(() => {
+        if (!hasFinalizedRef.current) {
+          console.warn("[VoiceRecorder] stop event timeout, forcing finalize");
+          finalizeRecording(recorder);
+        }
+      }, 2000);
+    } catch (error) {
+      console.error("[VoiceRecorder] stopRecording error:", error);
+      finalizeRecording(null);
+      toast({
+        title: "停止录音失败",
+        description: "无法正常停止录音，请重新尝试。",
+        variant: "error",
+      });
     }
   };
 
@@ -324,7 +400,16 @@ export function VoiceRecorder({ sessionToken, meta, className, onRecognized }: V
 
       {audioUrl ? (
         <div className="space-y-3">
-          <audio src={audioUrl} controls className="w-full rounded-2xl" />
+          <audio
+            key={audioUrl}
+            ref={audioElementRef}
+            controls
+            preload="metadata"
+            className="w-full rounded-2xl"
+          >
+            <source src={audioUrl} type={mimeType ?? undefined} />
+            您的浏览器不支持音频播放。
+          </audio>
           <div className="flex flex-wrap gap-3">
             <Button type="button" variant="secondary" onClick={resetRecording}>
               重新录制

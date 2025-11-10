@@ -25,7 +25,7 @@ function assertEnv(value: string | undefined, name: string): string {
 }
 
 export async function requireAuthContext(): Promise<AuthContext> {
-  const headerStore = headers();
+  const headerStore = await headers();
   const authHeader = headerStore.get("Authorization") ?? headerStore.get("authorization");
 
   if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {

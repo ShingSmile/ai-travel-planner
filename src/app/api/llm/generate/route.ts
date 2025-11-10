@@ -278,7 +278,7 @@ async function persistGenerationResult(
     await enrichActivitiesWithPoi(activityPayload, {
       city: plan.overview.destination,
       keywords: [plan.overview.destination, plan.overview.title],
-      limit: 12,
+      limit: activityPayload.length,
     });
 
     const { error: insertActivityError } = await supabase

@@ -9,7 +9,7 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - .env.docker
+      - .env.docker.local
     environment:
       - NODE_ENV=production
     depends_on:

@@ -108,6 +108,7 @@ const currencyTokens: Record<string, string> = {
 };
 
 const durationRegex = /(\d+(?:\.\d+)?)\s*(?:天|日)/i;
+const chineseDurationRegex = /([零一二三四五六七八九十百千万两半]+)(?:天|日)/gi;
 const rangeRegex = /(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日/gi;
 const fieldWeights: Record<TripIntentFieldKey, number> = {
   destination: 0.25,
@@ -220,8 +221,7 @@ function extractDateRange(text: string, baseYear: number): TripIntentDateRange |
     }
   }
 
-  const durationMatch = durationRegex.exec(text);
-  const durationDays = durationMatch ? Number(durationMatch[1]) : undefined;
+  const durationDays = extractDurationDays(text);
 
   if (dates.length === 0 && !durationDays) {
     return undefined;
@@ -280,6 +280,27 @@ function extractBudget(text: string): TripIntentBudget | undefined {
     currency,
     text: match[0].trim(),
   };
+}
+
+function extractDurationDays(text: string): number | undefined {
+  const digitMatch = durationRegex.exec(text);
+  if (digitMatch) {
+    const value = Number(digitMatch[1]);
+    if (!Number.isNaN(value) && value > 0) {
+      return value;
+    }
+  }
+
+  chineseDurationRegex.lastIndex = 0;
+  const chineseMatch = chineseDurationRegex.exec(text);
+  if (chineseMatch) {
+    const value = chineseNumberToArabic(chineseMatch[1]);
+    if (!Number.isNaN(value) && value > 0) {
+      return value;
+    }
+  }
+
+  return undefined;
 }
 
 function extractTravelParty(text: string): TripIntentTravelParty | undefined {
@@ -355,6 +376,49 @@ function resolveCurrency(token?: string | null) {
   if (!token) return "CNY";
   const normalized = token.toLowerCase();
   return currencyTokens[normalized] ?? currencyTokens[token] ?? "CNY";
+}
+
+const chineseDigitMap: Record<string, number> = {
+  零: 0,
+  一: 1,
+  二: 2,
+  两: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+  七: 7,
+  八: 8,
+  九: 9,
+};
+
+const chineseUnitMap: Record<string, number> = {
+  十: 10,
+  百: 100,
+  千: 1000,
+  万: 10000,
+};
+
+function chineseNumberToArabic(value: string) {
+  let total = 0;
+  let current = 0;
+
+  for (const char of value) {
+    if (chineseUnitMap[char]) {
+      const unit = chineseUnitMap[char];
+      if (current === 0) {
+        current = 1;
+      }
+      total += current * unit;
+      current = 0;
+    } else if (typeof chineseDigitMap[char] === "number") {
+      current += chineseDigitMap[char];
+    } else if (char === "半") {
+      current += 0.5;
+    }
+  }
+
+  return total + current;
 }
 
 function toISODate(year: number, month: number, day: number) {

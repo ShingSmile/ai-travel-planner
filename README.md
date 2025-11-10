@@ -90,6 +90,7 @@ npm run dev
 | `LLM_ENABLE_NORMALIZATION_FALLBACKS`                              | 是否启用行程兜底逻辑               | 默认关闭以保留模型原始输出；设为 `true/1/yes` 可恢复旧的占位数据                  |
 | `LLM_DEBUG_STRUCTURED_OUTPUT`                                     | 输出 LLM 原始/归一化调试信息       | 设为 `true/1/yes` 后会在服务端日志打印，便于定位 Schema 失败                      |
 | `NEXT_PUBLIC_AMAP_KEY` / `AMAP_REST_KEY`                          | 高德 JS SDK 与 Web 服务密钥        | 前端需配置 Referer 白名单                                                         |
+| `NEXT_PUBLIC_AMAP_SECURITY_CODE`                                  | 高德 JS SDK 安全密钥（可选但推荐） | 启用安全密钥后必须传入，否则会出现 `INVALID_USER_SCODE`                           |
 | `VOICE_RECOGNIZER_PROVIDER`                                       | 语音识别提供商                     | 默认 `mock`，可切换 `iflytek`/`openai`                                            |
 | `IFLYTEK_APP_ID` / `IFLYTEK_API_KEY` / `IFLYTEK_API_SECRET`       | 讯飞语音听写凭证（流式 WebSocket） | `VOICE_RECOGNIZER_PROVIDER=iflytek` 时必填                                        |
 | `IFLYTEK_API_BASE_URL` / `IFLYTEK_DOMAIN` / `IFLYTEK_LANGUAGE` 等 | 讯飞流式参数（可选）               | 默认 `wss://iat-api.xfyun.cn/v2/iat`、`iat`、`zh_cn`                              |
@@ -156,7 +157,9 @@ docker build -t ai-travel-planner:latest .
 docker compose up --build
 ```
 
-- 需要提前将 `.env.docker` 或其他生产环境变量挂载到容器。
+- 先执行 `cp .env.docker .env.docker.local` 并写入真实值；该文件已通过 `.gitignore` / `.dockerignore` 屏蔽，内容不会进入 Git 仓库或镜像构建上下文。
+- 构建镜像时，Next.js 会读取当前终端的环境变量：可以运行 `export $(grep -v '^#' .env.docker.local | xargs)` 后再执行 `docker build ...`，或在 CI/CD 中通过 Secrets 注入。
+- 运行容器时使用 `docker run --env-file .env.docker.local ...`，`docker compose` 版本会自动将该文件作为 `env_file` 注入。
 - 默认镜像导出 `3000` 端口，可通过 `PORT` 环境变量覆盖。
 
 ---

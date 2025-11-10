@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { getSupabaseClient } from "@/lib/supabase-client";
-import { VoiceRecorder } from "@/components/voice/voice-recorder";
 import { getPlaywrightBypassToken } from "@/lib/test-flags";
 import { TripIntentAssistant } from "@/components/planner/trip-intent-assistant";
 import type { TripIntentDraft, TripIntentTravelParty } from "@/types/trip-intent";
@@ -115,11 +114,16 @@ export default function PlannerNewPage() {
       }
     }
 
-    if (draft.dateRange?.startDate) {
-      setStartDate(draft.dateRange.startDate);
+    const { startDateToApply, endDateToApply } = resolveDateRangeFromIntent({
+      draft,
+      currentStartDate: startDate,
+      currentEndDate: endDate,
+    });
+    if (startDateToApply) {
+      setStartDate(startDateToApply);
     }
-    if (draft.dateRange?.endDate) {
-      setEndDate(draft.dateRange.endDate);
+    if (endDateToApply) {
+      setEndDate(endDateToApply);
     }
 
     if (draft.budget?.amount) {
@@ -375,23 +379,6 @@ export default function PlannerNewPage() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground/90">语音速记（备注）</label>
-            <VoiceRecorder
-              sessionToken={sessionToken}
-              meta={{ purpose: "trip_notes" }}
-              onRecognized={(payload) => {
-                if (!payload?.transcript) return;
-                setNotes((previous) => {
-                  if (!previous?.trim()) {
-                    return payload.transcript;
-                  }
-                  return `${previous.trim()}\n${payload.transcript}`;
-                });
-              }}
-            />
-          </div>
-
           <TextArea
             label="补充说明"
             placeholder="可填写偏好景点、必须安排的活动、饮食禁忌等信息"
@@ -451,4 +438,70 @@ function buildTravelersFromParty(party: TripIntentTravelParty) {
   }
 
   return next.length > 0 ? next : [{ name: "", role: "" }];
+}
+
+function resolveDateRangeFromIntent({
+  draft,
+  currentStartDate,
+  currentEndDate,
+}: {
+  draft: TripIntentDraft;
+  currentStartDate: string;
+  currentEndDate: string;
+}) {
+  const durationDays = draft.dateRange?.durationDays ?? null;
+  let startDateToApply =
+    draft.dateRange?.startDate || (currentStartDate?.trim() ? currentStartDate : null);
+  let endDateToApply = draft.dateRange?.endDate || (currentEndDate?.trim() ? currentEndDate : null);
+
+  if (!startDateToApply && durationDays && durationDays > 0) {
+    startDateToApply = getTodayISODate();
+  }
+
+  if (durationDays && durationDays > 0 && startDateToApply) {
+    const computedEnd = addDaysISO(startDateToApply, durationDays - 1);
+    if (computedEnd) {
+      if (!endDateToApply) {
+        endDateToApply = computedEnd;
+      } else if (compareISODate(endDateToApply, startDateToApply) < 0) {
+        endDateToApply = computedEnd;
+      }
+    }
+  }
+
+  return {
+    startDateToApply,
+    endDateToApply,
+  };
+}
+
+function getTodayISODate() {
+  const today = new Date();
+  return new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()))
+    .toISOString()
+    .slice(0, 10);
+}
+
+function addDaysISO(baseDate: string, daysToAdd: number) {
+  const date = parseISODate(baseDate);
+  if (!date) return null;
+  date.setUTCDate(date.getUTCDate() + daysToAdd);
+  return date.toISOString().slice(0, 10);
+}
+
+function parseISODate(value: string) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function compareISODate(a: string, b: string) {
+  const dateA = parseISODate(a);
+  const dateB = parseISODate(b);
+  if (!dateA || !dateB) return 0;
+  const diff = dateA.getTime() - dateB.getTime();
+  return diff === 0 ? 0 : diff > 0 ? 1 : -1;
 }

@@ -692,6 +692,7 @@ export default function TripDetailPage({ params }: { params: Promise<{ tripId: s
             days={trip.days}
             selectedActivityId={selectedActivityId}
             onActivitySelect={setSelectedActivityId}
+            cityHint={trip.destination}
           />
         </div>
 

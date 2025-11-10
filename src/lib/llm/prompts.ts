@@ -70,9 +70,15 @@ ${preferenceSummary ? `- 额外偏好说明：${preferenceSummary}` : ""}
 输出要求：
 1. 严格按照 Schema 字段命名输出，仅包含 Schema 定义的字段；
 2. 每日安排至少包含 3 个活动，包含起止时间、地点、概要与小贴士；
-3. 预算 breakdown 至少覆盖住宿、餐饮、交通、娱乐/门票四类；
-4. 若预算无法精确估算，可给出区间或说明假设前提；
-5. 最终仅输出合法 JSON，不得包含 Markdown 或额外解释。`;
+3. \`activities.location\` 必须填写具体可导航的地点（精确到景点入口、餐厅/商场名称或街道门牌），避免只写城市/区县/泛称。必要时在 \`summary\` 或 \`tips\` 中补充详细地址或交通说明；
+4. 预算 breakdown 至少覆盖住宿、餐饮、交通、娱乐/门票四类；
+5. 若预算无法精确估算，可给出区间或说明假设前提；
+6. 最终仅输出合法 JSON，不得包含 Markdown 或额外解释。
+
+附加 Schema 约束（必须遵守字段命名）：
+- 顶层仅输出 \`overview\`、\`days\`、\`budget\`（以及可选 \`suggestions\`），不要返回 \`dailyItinerary\`、\`itinerary\` 等额外键；
+- \`overview\` 内必须包含 \`title\`、\`destination\`、\`startDate\`、\`endDate\`、\`totalDays\`、\`summary\`；
+- \`days\` 中每个元素都需要 \`activities\` 数组，活动字段名固定为 \`name\`、\`type\`、\`summary\`、\`location\`、\`startTime\`、\`endTime\`、\`tips\`、\`budget\`。`;
 
   return [
     {

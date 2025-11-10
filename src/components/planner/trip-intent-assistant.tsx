@@ -133,7 +133,7 @@ export function TripIntentAssistant({ sessionToken, onApply }: TripIntentAssista
         </p>
         <h2 className="text-xl font-semibold text-foreground">一句话描述行程，自动填表</h2>
         <p className="text-sm text-muted">
-          试着说：「我想去日本东京，5 天，预算 1 万元，喜欢美食和动漫，带孩子」。
+          试着说：「我想去江苏苏州，3 天，预算 2000元，喜欢美食和动漫，带孩子」。
         </p>
       </header>
 

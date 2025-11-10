@@ -62,6 +62,7 @@ export default function TripsPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | TripStatus>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [trips, setTrips] = useState<TripListItem[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (bypassToken) {
@@ -144,6 +145,48 @@ export default function TripsPage() {
     if (!effectiveToken) return;
     void fetchTrips();
   }, [fetchTrips, loadingSession, effectiveToken]);
+
+  const handleDeleteTrip = useCallback(
+    async (tripId: string, tripTitle: string) => {
+      if (!effectiveToken) return;
+
+      const confirmed = window.confirm(`确定要删除行程「${tripTitle}」吗？此操作不可撤销。`);
+      if (!confirmed) return;
+
+      setDeletingId(tripId);
+      try {
+        const response = await fetch(`/api/trips/${tripId}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${effectiveToken}`,
+          },
+        });
+
+        const payload = await response.json();
+        if (!response.ok || !payload?.success) {
+          throw new Error(payload?.error?.message ?? "删除行程失败，请稍后重试。");
+        }
+
+        setTrips((prev) => prev.filter((trip) => trip.id !== tripId));
+        toast({
+          title: "行程已删除",
+          description: `「${tripTitle}」已从列表移除。`,
+          variant: "success",
+        });
+      } catch (caughtError) {
+        const message =
+          caughtError instanceof Error ? caughtError.message : "删除行程失败，请稍后重试。";
+        toast({
+          title: "删除失败",
+          description: message,
+          variant: "error",
+        });
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [effectiveToken, toast]
+  );
 
   const filteredTrips = useMemo(() => {
     const normalizedKeyword = searchTerm.trim().toLowerCase();
@@ -335,6 +378,22 @@ export default function TripsPage() {
                       继续生成
                     </Link>
                   ) : null}
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="flex-1 rounded-xl px-4 text-sm sm:flex-none h-10"
+                    onClick={() => handleDeleteTrip(trip.id, trip.title)}
+                    disabled={deletingId === trip.id}
+                  >
+                    {deletingId === trip.id ? (
+                      <>
+                        <Spinner size="sm" />
+                        删除中...
+                      </>
+                    ) : (
+                      "删除"
+                    )}
+                  </Button>
                 </div>
               </article>
             ))}

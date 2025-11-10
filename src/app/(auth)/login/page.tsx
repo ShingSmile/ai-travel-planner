@@ -30,6 +30,9 @@ export default function LoginPage() {
     try {
       setLoading(true);
       const supabase = getSupabaseClient();
+      if (!supabase) {
+        throw new Error("系统暂未配置数据服务，请稍后再试。");
+      }
       const { error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {

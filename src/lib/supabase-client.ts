@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let browserClient: SupabaseClient | null = null;
 
-export function getSupabaseClient() {
+export function getSupabaseClient(): SupabaseClient | null {
   if (browserClient) {
     return browserClient;
   }
@@ -11,6 +11,9 @@ export function getSupabaseClient() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
+    if (typeof window === "undefined") {
+      return null;
+    }
     throw new Error(
       "缺少 Supabase 客户端配置，请设置 NEXT_PUBLIC_SUPABASE_URL 与 NEXT_PUBLIC_SUPABASE_ANON_KEY。"
     );
