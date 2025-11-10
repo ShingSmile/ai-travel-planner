@@ -162,6 +162,39 @@ docker compose up --build
 - 运行容器时使用 `docker run --env-file .env.docker.local ...`，`docker compose` 版本会自动将该文件作为 `env_file` 注入。
 - 默认镜像导出 `3000` 端口，可通过 `PORT` 环境变量覆盖。
 
+### 使用已发布的阿里云镜像
+
+仓库地址：`crpi-delxamk1feq08x2x.cn-hangzhou.personal.cr.aliyuncs.com/qiqingfeng/ai-travel-planner`
+
+> 评测环境可向作者索取登录凭证（或使用 README/PDF 中提供的临时访问凭证）；也可以在阿里云容器镜像服务 → 访问凭证中新建账号。
+
+1. **准备环境变量**
+   ```bash
+   cp .env.docker .env.docker.local
+   # 按提示填入 Supabase、LLM、地图、语音等密钥
+   ```
+2. **登录镜像仓库**
+   ```bash
+   docker login crpi-delxamk1feq08x2x.cn-hangzhou.personal.cr.aliyuncs.com \
+     -u <ALIYUN_USERNAME> -p <ALIYUN_PASSWORD>
+   ```
+
+   - 若在阿里云 ECS / VPC 环境，可将域名替换为 `crpi-delxamk1feq08x2x-vpc.cn-hangzhou.personal.cr.aliyuncs.com` 以走内网。
+3. **拉取镜像**
+   ```bash
+   docker pull crpi-delxamk1feq08x2x.cn-hangzhou.personal.cr.aliyuncs.com/qiqingfeng/ai-travel-planner:latest
+   ```
+4. **运行容器**
+   ```bash
+   docker run --env-file .env.docker.local -p 3000:3000 \
+     crpi-delxamk1feq08x2x.cn-hangzhou.personal.cr.aliyuncs.com/qiqingfeng/ai-travel-planner:latest
+   ```
+
+   - 或者使用 Compose：`docker compose --env-file .env.docker.local up web`.
+5. 浏览器访问 `http://localhost:3000`，使用 Supabase 中的测试账号登录即可体验全部功能。
+
+> 镜像 tag 采用 `latest` 和 `vX.Y.Z`（来自 `package.json`），可在阿里云 ACR 仓库页面查看具体版本。
+
 ---
 
 ## 示例数据与截图
