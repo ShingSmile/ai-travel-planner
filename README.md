@@ -129,24 +129,6 @@ npm run dev
 
 ---
 
-## PDF 导出
-
-执行以下命令会将 `README.md` 与 `docs/AI旅行规划师项目实现指南.md` 转换为 PDF，输出至 `docs/output/` 目录：
-
-```bash
-# 首次运行前请确保安装依赖并下载浏览器
-npm install
-npx playwright install chromium
-
-npm run export:pdf
-```
-
-- 输出文件包含 `docs/output/README.pdf` 与 `docs/output/AI旅行规划师项目实现指南.pdf`。
-- 受限环境（如 Codex CLI sandbox）若无法启动浏览器，可在执行命令时申请 `with_escalated_permissions` 权限。
-- 可在交付前打包上传，确保评审无需依赖仓库即可阅读。
-
----
-
 ## Docker 部署
 
 ```bash
@@ -174,23 +156,27 @@ docker compose up --build
    # 按提示填入 Supabase、LLM、地图、语音等密钥
    ```
 2. **登录镜像仓库**
+
    ```bash
    docker login crpi-delxamk1feq08x2x.cn-hangzhou.personal.cr.aliyuncs.com \
      -u <ALIYUN_USERNAME> -p <ALIYUN_PASSWORD>
    ```
 
    - 若在阿里云 ECS / VPC 环境，可将域名替换为 `crpi-delxamk1feq08x2x-vpc.cn-hangzhou.personal.cr.aliyuncs.com` 以走内网。
+
 3. **拉取镜像**
    ```bash
    docker pull crpi-delxamk1feq08x2x.cn-hangzhou.personal.cr.aliyuncs.com/qiqingfeng/ai-travel-planner:latest
    ```
 4. **运行容器**
+
    ```bash
    docker run --env-file .env.docker.local -p 3000:3000 \
      crpi-delxamk1feq08x2x.cn-hangzhou.personal.cr.aliyuncs.com/qiqingfeng/ai-travel-planner:latest
    ```
 
    - 或者使用 Compose：`docker compose --env-file .env.docker.local up web`.
+
 5. 浏览器访问 `http://localhost:3000`，使用 Supabase 中的测试账号登录即可体验全部功能。
 
 > 镜像 tag 采用 `latest` 和 `vX.Y.Z`（来自 `package.json`），可在阿里云 ACR 仓库页面查看具体版本。
