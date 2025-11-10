@@ -10,6 +10,7 @@ ENV PNPM_HOME="/pnpm" \
   NODE_ENV=production \
   NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
+RUN apk add --no-cache ffmpeg
 
 FROM base AS deps
 ENV NODE_ENV=development
