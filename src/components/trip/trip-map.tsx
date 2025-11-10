@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "@amap/amap-jsapi-types";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,7 @@ type TripMapProps = {
   days: TripMapDay[];
   selectedActivityId: string | null;
   onActivitySelect?: (activityId: string | null) => void;
+  cityHint?: string | null;
 };
 
 type MapOverlay = {
@@ -84,7 +85,7 @@ const activityTypeLabel: Record<string, string> = {
   accommodation: "住宿",
 };
 
-export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapProps) {
+export function TripMap({ days, selectedActivityId, onActivitySelect, cityHint }: TripMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<AMap.Map | null>(null);
   const amapRef = useRef<AMapNamespace | null>(null);
@@ -92,14 +93,24 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     markers: [],
     segments: [],
   });
+  const visibleMarkerIdsRef = useRef<Set<string>>(new Set());
   const geocoderRef = useRef<AMapGeocoder | null>(null);
   const geocodeCacheRef = useRef<Map<string, Coordinates>>(new Map());
+  const routeCacheRef = useRef<Map<string, Coordinates[]>>(new Map());
+  const geocodeFailureRef = useRef<Set<string>>(new Set());
+  const geocodePendingRef = useRef<Set<string>>(new Set());
+  const missingActivityLogRef = useRef<Set<string>>(new Set());
   const lastSelectedIdRef = useRef<string | null>(null);
+  const lastVisibleDayRef = useRef<string | "all">("all");
+  const pendingFocusIdRef = useRef<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [visibleDayId, setVisibleDayId] = useState<string | "all">("all");
   const [overlayRevision, setOverlayRevision] = useState(0);
+  const [selectedMarkerStatus, setSelectedMarkerStatus] = useState<
+    "unknown" | "available" | "missing"
+  >("unknown");
 
   const flattenedActivities = useMemo(() => {
     return days.flatMap((day, dayIndex) => {
@@ -150,6 +161,34 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     return flattenedActivities.find((entry) => entry.activity.id === selectedActivityId) ?? null;
   }, [flattenedActivities, selectedActivityId]);
 
+  const normalizedCityHint = useMemo(() => {
+    if (!cityHint) return null;
+    const text = cityHint.trim();
+    return text.length > 0 ? text : null;
+  }, [cityHint]);
+
+  const activityHasCoordinates = useCallback((activity: TripMapActivity) => {
+    return Boolean(activity.location || extractCoordinates(activity));
+  }, []);
+
+  const openInfoWindowForOverlay = useCallback((overlay: MapOverlay) => {
+    if (!mapRef.current || !amapRef.current) return;
+    const amap = amapRef.current;
+    const infoWindow = new amap.InfoWindow({
+      offset: new amap.Pixel(0, -30),
+      closeWhenClickMap: true,
+    });
+    infoWindow.setContent(
+      `<div class="trip-map-infowindow"><strong>${overlay.orderLabel}</strong></div>`
+    );
+    const markerPosition = overlay.marker.getPosition();
+    if (!markerPosition) {
+      return;
+    }
+    const markerCenter: [number, number] = [markerPosition.getLng(), markerPosition.getLat()];
+    infoWindow.open(mapRef.current, markerCenter);
+  }, []);
+
   const handleResetView = () => {
     if (visibleDayId !== "all") {
       setVisibleDayId("all");
@@ -159,18 +198,138 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     }
   };
 
+  const instantiateMarkerOverlay = useCallback(
+    (
+      entry: {
+        activity: TripMapActivity;
+        day: TripMapDay;
+        orderLabel: string;
+      },
+      coords: Coordinates
+    ): MapOverlay | null => {
+      if (!mapRef.current || !amapRef.current) {
+        return null;
+      }
+      const amap = amapRef.current;
+      const marker = new amap.Marker({
+        position: new amap.LngLat(coords.lng, coords.lat),
+        title: `${entry.orderLabel} ${getActivityName(entry.activity)}`,
+        offset: new amap.Pixel(-10, -28),
+        icon: createMarkerIcon(amap, entry.activity.type),
+        extData: {
+          activityId: entry.activity.id,
+        },
+      });
+
+      marker.setLabel({
+        direction: "top",
+        offset: new amap.Pixel(0, -8),
+        style: {
+          border: "none",
+          background: "transparent",
+          color: "#111827",
+          fontWeight: "600",
+        },
+        content: entry.orderLabel,
+      } as Parameters<AMap.Marker["setLabel"]>[0]);
+
+      marker.on("click", () => {
+        onActivitySelect?.(entry.activity.id);
+      });
+
+      return {
+        marker,
+        activityId: entry.activity.id,
+        orderLabel: `${entry.day.summary ?? entry.day.date} · ${entry.orderLabel}`,
+      };
+    },
+    [onActivitySelect]
+  );
+
+  const focusMarkerById = useCallback(
+    (
+      activityId: string,
+      options?: {
+        forceFit?: boolean;
+        logLabel?: string;
+      }
+    ) => {
+      if (!mapRef.current) return false;
+      let overlay = overlaysRef.current.markers.find((item) => item.activityId === activityId);
+
+      if (!overlay) {
+        const fallbackEntry = flattenedActivities.find((entry) => entry.activity.id === activityId);
+        const fallbackCoords = fallbackEntry ? extractCoordinates(fallbackEntry.activity) : null;
+        if (fallbackEntry && fallbackCoords && mapRef.current) {
+          const created = instantiateMarkerOverlay(fallbackEntry, fallbackCoords);
+          if (created) {
+            created.marker.setMap(mapRef.current);
+            overlaysRef.current.markers.push(created);
+            visibleMarkerIdsRef.current.add(activityId);
+            overlay = created;
+            setOverlayRevision((value) => value + 1);
+          }
+        }
+      }
+
+      if (!overlay) return false;
+      const position = overlay.marker.getPosition();
+      if (!position) return false;
+
+      const center: [number, number] = [position.getLng(), position.getLat()];
+      if (options?.forceFit) {
+        const zoom = Math.max(mapRef.current.getZoom() ?? 12, 14);
+        mapRef.current.setZoomAndCenter?.(zoom, center);
+        mapRef.current.panTo?.(center);
+        mapRef.current.setFitView?.([overlay.marker], false, [80, 80, 80, 80]);
+      } else {
+        mapRef.current.setCenter(center);
+      }
+      openInfoWindowForOverlay(overlay);
+
+      if (options?.logLabel) {
+        console.info(options.logLabel, {
+          activityId,
+          forceFit: Boolean(options.forceFit),
+          center,
+        });
+      }
+      return true;
+    },
+    [flattenedActivities, instantiateMarkerOverlay, openInfoWindowForOverlay]
+  );
+
   const focusOnSelectedMarker = () => {
-    if (!selectedActivityId || !mapRef.current) return;
-    const overlay = overlaysRef.current.markers.find(
-      (item) => item.activityId === selectedActivityId
-    );
-    if (!overlay) return;
-    const position = overlay.marker.getPosition();
-    if (!position) return;
-    const center: [number, number] = [position.getLng(), position.getLat()];
-    const zoom = Math.max(mapRef.current.getZoom() ?? 12, 14);
-    mapRef.current.setZoomAndCenter?.(zoom, center);
-    mapRef.current.panTo?.(center);
+    if (!selectedActivityId) {
+      console.warn("[TripMap] 定位失败：没有选中的活动");
+      return;
+    }
+    if (selectedMarkerStatus === "missing") {
+      console.warn("[TripMap] 定位失败：该活动缺少可用坐标", {
+        selectedActivityId,
+        visibleDayId,
+      });
+      return;
+    }
+    if (selectedMarkerStatus === "unknown") {
+      pendingFocusIdRef.current = selectedActivityId;
+      console.info("[TripMap] 地图覆盖物尚未准备好，等待后重试", { selectedActivityId });
+      return;
+    }
+
+    const success = focusMarkerById(selectedActivityId, {
+      forceFit: true,
+      logLabel: "[TripMap] 在地图中定位活动",
+    });
+    if (!success) {
+      pendingFocusIdRef.current = selectedActivityId;
+      console.warn("[TripMap] 定位失败：找不到目标覆盖物，稍后重试", {
+        selectedActivityId,
+        visibleDayId,
+      });
+    } else {
+      pendingFocusIdRef.current = null;
+    }
   };
 
   const selectedSummary = selectedEntry ? getActivitySummary(selectedEntry.activity) : null;
@@ -191,12 +350,70 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
   }, [selectedActivityId]);
 
   useEffect(() => {
+    const pendingId = pendingFocusIdRef.current;
+    if (!pendingId) return;
+    if (!selectedActivityId || pendingId !== selectedActivityId) {
+      pendingFocusIdRef.current = null;
+    }
+  }, [selectedActivityId]);
+
+  useEffect(() => {
     if (!selectedActivityId) return;
     const exists = filteredActivities.some((entry) => entry.activity.id === selectedActivityId);
     if (!exists && onActivitySelect) {
+      console.info("[TripMap] 当前筛选条件下找不到选中的活动，清空选择", {
+        selectedActivityId,
+        visibleDayId,
+      });
       onActivitySelect(null);
     }
-  }, [filteredActivities, onActivitySelect, selectedActivityId]);
+  }, [filteredActivities, onActivitySelect, selectedActivityId, visibleDayId]);
+
+  useEffect(() => {
+    if (!onActivitySelect) return;
+    if (lastVisibleDayRef.current === visibleDayId) {
+      return;
+    }
+    const previousDay = lastVisibleDayRef.current;
+    lastVisibleDayRef.current = visibleDayId;
+
+    if (filteredActivities.length === 0) {
+      console.info("[TripMap] 切换到没有活动的日期", {
+        previousDay,
+        visibleDayId,
+      });
+      return;
+    }
+
+    const hasSelected =
+      !!selectedActivityId &&
+      filteredActivities.some((entry) => entry.activity.id === selectedActivityId);
+
+    if (hasSelected) {
+      return;
+    }
+
+    const nextEntry =
+      filteredActivities.find((entry) => activityHasCoordinates(entry.activity)) ??
+      filteredActivities[0];
+    if (!nextEntry) {
+      console.info("[TripMap] 当前筛选下没有可选择的活动");
+      return;
+    }
+    console.info("[TripMap] 切换日期后自动选中首个活动", {
+      previousDay,
+      visibleDayId,
+      activityId: nextEntry.activity.id,
+      hasCoordinates: activityHasCoordinates(nextEntry.activity),
+    });
+    onActivitySelect(nextEntry.activity.id);
+  }, [
+    activityHasCoordinates,
+    filteredActivities,
+    onActivitySelect,
+    selectedActivityId,
+    visibleDayId,
+  ]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -211,6 +428,10 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     }
 
     let destroyed = false;
+    const geocodeFailureSet = geocodeFailureRef.current;
+    const geocodePendingSet = geocodePendingRef.current;
+    const missingLogSet = missingActivityLogRef.current;
+    const routeCache = routeCacheRef.current;
     setLoading(true);
     setError(null);
 
@@ -249,6 +470,11 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
       overlaysRef.current.markers.forEach(({ marker }) => marker.setMap(null));
       overlaysRef.current.segments.forEach(({ polyline }) => polyline.setMap(null));
       overlaysRef.current = { markers: [], segments: [] };
+      visibleMarkerIdsRef.current = new Set();
+      geocodeFailureSet.clear();
+      geocodePendingSet.clear();
+      missingLogSet.clear();
+      routeCache.clear();
       geocoderRef.current = null;
       if (mapRef.current) {
         mapRef.current.destroy();
@@ -264,6 +490,11 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     overlaysRef.current.markers.forEach(({ marker }) => marker.setMap(null));
     overlaysRef.current.segments.forEach(({ polyline }) => polyline.setMap(null));
     overlaysRef.current = { markers: [], segments: [] };
+    visibleMarkerIdsRef.current = new Set();
+    geocodeFailureRef.current.clear();
+    geocodePendingRef.current.clear();
+    missingActivityLogRef.current.clear();
+    setOverlayRevision((value) => value + 1);
 
     if (filteredActivities.length === 0) {
       setError(visibleDayId === "all" ? "当前行程暂无可展示的活动。" : "所选日期暂无活动内容。");
@@ -287,9 +518,34 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
 
       const resolved = await Promise.all(
         tasks.map(async (entry) => {
-          const coords = await resolveCoordinates(entry.activity, geocodeCacheRef.current);
+          const coords = await resolveCoordinates(
+            entry.activity,
+            geocodeCacheRef.current,
+            normalizedCityHint
+          );
           if (coords) {
+            missingActivityLogRef.current.delete(entry.activity.id);
             return { ...entry, coords };
+          }
+
+          const locationText = entry.activity.location ?? null;
+          if (!missingActivityLogRef.current.has(entry.activity.id)) {
+            missingActivityLogRef.current.add(entry.activity.id);
+            const geocodeStatus = !locationText
+              ? "no-location"
+              : geocodeFailureRef.current.has(locationText)
+                ? "geocode-failed"
+                : geocodePendingRef.current.has(locationText)
+                  ? "pending"
+                  : "unknown";
+            const inlineCoordsAvailable = Boolean(extractCoordinates(entry.activity));
+            console.info("[TripMap] 无法为活动解析坐标", {
+              activityId: entry.activity.id,
+              location: locationText,
+              geocodeStatus,
+              hasInlineCoordinates: inlineCoordsAvailable,
+              visibleDayId: entry.day.id,
+            });
           }
           return null;
         })
@@ -308,66 +564,48 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
 
       setError(null);
 
-      const markers: MapOverlay[] = validEntries.map(({ activity, day, coords, orderLabel }) => {
-        const marker = new amap.Marker({
-          position: new amap.LngLat(coords.lng, coords.lat),
-          title: `${orderLabel} ${getActivityName(activity)}`,
-          offset: new amap.Pixel(-10, -28),
-          icon: createMarkerIcon(amap, activity.type),
-          extData: {
-            activityId: activity.id,
-          },
-        });
-
-        marker.setLabel({
-          direction: "top",
-          offset: new amap.Pixel(0, -8),
-          style: {
-            border: "none",
-            background: "transparent",
-            color: "#111827",
-            fontWeight: "600",
-          },
-          content: orderLabel,
-        } as Parameters<AMap.Marker["setLabel"]>[0]);
-
-        marker.on("click", () => {
-          onActivitySelect?.(activity.id);
-        });
-
-        return {
-          marker,
-          activityId: activity.id,
-          orderLabel: `${day.summary ?? day.date} · ${orderLabel}`,
-        };
+      const markers: MapOverlay[] = [];
+      validEntries.forEach((entry) => {
+        const overlay = instantiateMarkerOverlay(entry, entry.coords);
+        if (overlay) {
+          markers.push(overlay);
+        }
       });
 
       markers.forEach(({ marker }) => marker.setMap(mapRef.current!));
       overlaysRef.current.markers = markers;
 
       const dayGroups = groupEntriesByDay(validEntries);
-      const segments: MapSegment[] = [];
+      const segmentResults = await Promise.all(
+        dayGroups.map(async ({ dayId, entries }) => {
+          if (entries.length < 2) return [] as MapSegment[];
+          const daySegments: MapSegment[] = [];
+          for (let index = 0; index < entries.length - 1; index += 1) {
+            const current = entries[index];
+            const next = entries[index + 1];
+            const path = await resolveRoutePath(current.coords, next.coords);
+            if (!path || path.length < 2) {
+              continue;
+            }
+            const polyline = new amap.Polyline({
+              path: path.map((point) => [point.lng, point.lat]) as [number, number][],
+              strokeColor: "#2563eb",
+              strokeOpacity: 0.75,
+              strokeWeight: 4,
+              strokeStyle: "solid",
+              lineJoin: "round",
+              zIndex: 40,
+            });
+            polyline.setMap(mapRef.current!);
+            daySegments.push({ polyline, dayId });
+          }
+          return daySegments;
+        })
+      );
 
-      dayGroups.forEach(({ dayId, entries }) => {
-        if (entries.length < 2) return;
-        const path = entries.map((entry) => [entry.coords.lng, entry.coords.lat]) as [
-          number,
-          number,
-        ][];
-        const polyline = new amap.Polyline({
-          path,
-          strokeColor: "#2563eb",
-          strokeOpacity: 0.6,
-          strokeWeight: 4,
-          strokeStyle: "solid",
-          lineJoin: "round",
-          zIndex: 40,
-        });
-        polyline.setMap(mapRef.current!);
-        segments.push({ polyline, dayId });
-      });
-
+      const segments = segmentResults.flat();
       overlaysRef.current.segments = segments;
+      visibleMarkerIdsRef.current = new Set(validEntries.map((entry) => entry.activity.id));
       mapRef.current!.setFitView(undefined, undefined, [80, 80, 80, 80]);
       setOverlayRevision((value) => value + 1);
     };
@@ -382,35 +620,78 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
     return () => {
       disposed = true;
     };
-  }, [filteredActivities, onActivitySelect, visibleDayId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredActivities, onActivitySelect, visibleDayId, normalizedCityHint]);
+
+  const selectedInlineCoordinates = useMemo(() => {
+    if (!selectedEntry) return null;
+    return extractCoordinates(selectedEntry.activity);
+  }, [selectedEntry]);
 
   useEffect(() => {
-    if (!mapRef.current || !amapRef.current) return;
     if (!selectedActivityId) {
+      setSelectedMarkerStatus("missing");
       return;
     }
+    if (loading) {
+      setSelectedMarkerStatus("unknown");
+      return;
+    }
+    const hasMarker = visibleMarkerIdsRef.current.has(selectedActivityId);
+    if (hasMarker || selectedInlineCoordinates) {
+      setSelectedMarkerStatus("available");
+    } else {
+      setSelectedMarkerStatus("missing");
+    }
+  }, [selectedActivityId, overlayRevision, loading, selectedInlineCoordinates]);
 
-    const overlay = overlaysRef.current.markers.find(
-      (item) => item.activityId === selectedActivityId
-    );
-    if (!overlay) return;
+  useEffect(() => {
+    if (!selectedActivityId) return;
+    if (!visibleMarkerIdsRef.current.has(selectedActivityId)) {
+      return;
+    }
+    focusMarkerById(selectedActivityId, { forceFit: false });
+  }, [selectedActivityId, overlayRevision, focusMarkerById]);
 
-    const amap = amapRef.current;
-    const infoWindow = new amap.InfoWindow({
-      offset: new amap.Pixel(0, -30),
-      closeWhenClickMap: true,
+  useEffect(() => {
+    const targetId = pendingFocusIdRef.current;
+    if (!targetId) return;
+    if (selectedMarkerStatus !== "available") return;
+    const success = focusMarkerById(targetId, {
+      forceFit: true,
+      logLabel: "[TripMap] 覆盖物准备就绪，完成延迟定位",
     });
-    infoWindow.setContent(
-      `<div class="trip-map-infowindow"><strong>${overlay.orderLabel}</strong></div>`
-    );
-    const markerPosition = overlay.marker.getPosition();
-    if (!markerPosition) {
-      return;
+    if (success) {
+      pendingFocusIdRef.current = null;
     }
-    const markerCenter: [number, number] = [markerPosition.getLng(), markerPosition.getLat()];
-    mapRef.current.setCenter(markerCenter);
-    infoWindow.open(mapRef.current, markerCenter);
-  }, [selectedActivityId, overlayRevision]);
+  }, [selectedMarkerStatus, focusMarkerById]);
+
+  useEffect(() => {
+    if (selectedMarkerStatus === "missing" && pendingFocusIdRef.current) {
+      pendingFocusIdRef.current = null;
+    }
+  }, [selectedMarkerStatus]);
+
+  useEffect(() => {
+    if (selectedMarkerStatus !== "missing") return;
+    if (!selectedEntry) return;
+    const locationText = selectedEntry.activity.location?.trim() ?? null;
+    const geocodeStatus = !locationText
+      ? "no-location"
+      : geocodeFailureRef.current.has(locationText)
+        ? "geocode-failed"
+        : geocodePendingRef.current.has(locationText)
+          ? "pending"
+          : "unknown";
+    const inlineCoords = extractCoordinates(selectedEntry.activity);
+    console.info("[TripMap] 当前活动缺少可解析坐标", {
+      activityId: selectedEntry.activity.id,
+      location: locationText,
+      geocodeStatus,
+      hasInlineCoordinates: Boolean(inlineCoords),
+      visibleDayId,
+    });
+  }, [selectedEntry, selectedMarkerStatus, visibleDayId]);
 
   useEffect(() => {
     const highlightDayId = selectedEntry?.day.id ?? (visibleDayId !== "all" ? visibleDayId : null);
@@ -443,7 +724,13 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
               <button
                 type="button"
                 key={option.id}
-                onClick={() => setVisibleDayId(option.id)}
+                onClick={() => {
+                  console.info("[TripMap] 用户切换地图日期筛选", {
+                    previous: visibleDayId,
+                    next: option.id,
+                  });
+                  setVisibleDayId(option.id);
+                }}
                 className={cn(
                   "rounded-2xl border px-3 py-1 text-xs text-muted transition hover:text-foreground",
                   visibleDayId === option.id && "border-primary/50 bg-primary/10 text-primary"
@@ -506,9 +793,26 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
               <button
                 type="button"
                 onClick={focusOnSelectedMarker}
-                className="rounded-full border border-border px-3 py-1 text-foreground transition hover:border-foreground"
+                disabled={selectedMarkerStatus !== "available"}
+                className={cn(
+                  "rounded-full border border-border px-3 py-1 text-foreground transition",
+                  selectedMarkerStatus === "available"
+                    ? "hover:border-foreground"
+                    : "cursor-not-allowed text-muted opacity-70"
+                )}
+                title={
+                  selectedMarkerStatus === "missing"
+                    ? "该活动缺少可定位的坐标"
+                    : selectedMarkerStatus === "unknown"
+                      ? "地图正在加载中"
+                      : undefined
+                }
               >
-                在地图中定位
+                {selectedMarkerStatus === "available"
+                  ? "在地图中定位"
+                  : selectedMarkerStatus === "unknown"
+                    ? "地图加载中..."
+                    : "无定位数据"}
               </button>
               <button
                 type="button"
@@ -548,44 +852,275 @@ export function TripMap({ days, selectedActivityId, onActivitySelect }: TripMapP
 
   async function resolveCoordinates(
     activity: TripMapActivity,
-    cache: Map<string, Coordinates>
+    cache: Map<string, Coordinates>,
+    cityHint?: string | null
   ): Promise<Coordinates | null> {
     const fromDetails = extractCoordinates(activity);
     if (fromDetails) return fromDetails;
 
-    const location = activity.location;
+    const location = activity.location?.trim();
     if (!location) return null;
-
-    if (cache.has(location)) {
-      return cache.get(location)!;
-    }
 
     const geocoder = geocoderRef.current;
     const amap = amapRef.current;
-    if (!geocoder || !amap) return null;
+    if (!geocoder || !amap) {
+      if (!geocodeFailureRef.current.has(location)) {
+        geocodeFailureRef.current.add(location);
+        console.info("[TripMap] 地理编码器未就绪", {
+          location,
+          hasGeocoder: Boolean(geocoder),
+          hasAmap: Boolean(amap),
+        });
+      }
+      geocodePendingRef.current.delete(location);
+      return null;
+    }
+
+    const candidates = buildGeocodeCandidates(location, cityHint);
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    for (const candidate of candidates) {
+      if (cache.has(candidate)) {
+        const coords = cache.get(candidate)!;
+        aliasGeocodeSuccess(coords, candidates, cache);
+        return coords;
+      }
+    }
+
+    for (const candidate of candidates) {
+      const coords = await geocodeKeyword(candidate, geocoder, cityHint);
+      if (coords) {
+        aliasGeocodeSuccess(coords, candidates, cache);
+        return coords;
+      }
+
+      const restCoords = await geocodeViaApi(candidate, cityHint);
+      if (restCoords) {
+        aliasGeocodeSuccess(restCoords, candidates, cache);
+        return restCoords;
+      }
+    }
+
+    candidates.forEach((key) => {
+      geocodePendingRef.current.delete(key);
+    });
+    geocodeFailureRef.current.add(location);
+    return null;
+  }
+
+  async function resolveRoutePath(
+    origin: Coordinates,
+    destination: Coordinates
+  ): Promise<Coordinates[]> {
+    const cacheKey = buildRouteCacheKey(origin, destination);
+    if (routeCacheRef.current.has(cacheKey)) {
+      return routeCacheRef.current.get(cacheKey)!;
+    }
+
+    const params = new URLSearchParams({
+      origin: `${origin.lng},${origin.lat}`,
+      destination: `${destination.lng},${destination.lat}`,
+      mode: "driving",
+    });
 
     try {
-      const coords = await new Promise<Coordinates | null>((resolve) => {
-        geocoder.getLocation(location, (status, result) => {
-          if (status === "complete" && result && result.geocodes.length > 0) {
-            const { location: point } = result.geocodes[0];
+      const response = await fetch(`/api/directions?${params.toString()}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const payload = await response.json();
+      if (response.ok && payload?.success && Array.isArray(payload?.data?.path)) {
+        const coords = (payload.data.path as Coordinates[]).filter((point) => {
+          return (
+            point &&
+            typeof point.lng === "number" &&
+            Number.isFinite(point.lng) &&
+            typeof point.lat === "number" &&
+            Number.isFinite(point.lat)
+          );
+        });
+        if (coords.length >= 2) {
+          routeCacheRef.current.set(cacheKey, coords);
+          return coords;
+        }
+      } else {
+        console.info("[TripMap] 路线规划失败", {
+          origin,
+          destination,
+          error: payload?.error ?? response.statusText,
+        });
+      }
+    } catch (error) {
+      console.warn("[TripMap] 请求路线规划失败", { origin, destination, error });
+    }
+
+    const fallback = [origin, destination];
+    routeCacheRef.current.set(cacheKey, fallback);
+    return fallback;
+  }
+
+  function buildRouteCacheKey(origin: Coordinates, destination: Coordinates) {
+    return `${origin.lng},${origin.lat}->${destination.lng},${destination.lat}`;
+  }
+
+  function aliasGeocodeSuccess(
+    coords: Coordinates,
+    keys: string[],
+    cache: Map<string, Coordinates>
+  ) {
+    keys.forEach((key) => {
+      cache.set(key, coords);
+      geocodePendingRef.current.delete(key);
+      geocodeFailureRef.current.delete(key);
+    });
+  }
+
+  function geocodeKeyword(
+    keyword: string,
+    geocoder: AMapGeocoder,
+    cityHint?: string | null
+  ): Promise<Coordinates | null> {
+    const trimmed = keyword.trim();
+    if (cityHint && geocoder.setCity) {
+      try {
+        geocoder.setCity(cityHint);
+      } catch {
+        // ignore
+      }
+    }
+    if (!geocodePendingRef.current.has(trimmed)) {
+      geocodePendingRef.current.add(trimmed);
+      console.info("[TripMap] 地理编码请求发起", { location: trimmed });
+    }
+
+    return new Promise((resolve) => {
+      try {
+        geocoder.getLocation(trimmed, (status, result) => {
+          const matchCount = result?.geocodes?.length ?? 0;
+          if (status === "complete" && matchCount > 0) {
+            const point = result!.geocodes![0]?.location;
             if (point) {
-              resolve({ lng: point.getLng(), lat: point.getLat() });
+              const coords = { lng: point.getLng(), lat: point.getLat() };
+              geocodePendingRef.current.delete(trimmed);
+              geocodeFailureRef.current.delete(trimmed);
+              console.info("[TripMap] 地理编码成功", { location: trimmed, coords });
+              resolve(coords);
               return;
             }
           }
+          geocodePendingRef.current.delete(trimmed);
+          if (!geocodeFailureRef.current.has(trimmed)) {
+            geocodeFailureRef.current.add(trimmed);
+            console.info("[TripMap] 地理编码缺少返回结果", {
+              location: trimmed,
+              status,
+              matchCount,
+            });
+          }
           resolve(null);
         });
-      });
-
-      if (coords) {
-        cache.set(location, coords);
+      } catch (error) {
+        geocodePendingRef.current.delete(trimmed);
+        console.warn("[TripMap] 获取地理编码失败", { location: trimmed, error });
+        resolve(null);
       }
-      return coords;
-    } catch (reason) {
-      console.warn("[TripMap] 获取地理编码失败", reason);
+    });
+  }
+
+  async function geocodeViaApi(keyword: string, cityHint?: string | null) {
+    const trimmed = keyword.trim();
+    try {
+      const params = new URLSearchParams({ keyword: trimmed });
+      if (cityHint?.trim()) {
+        params.set("city", cityHint.trim());
+      }
+      const response = await fetch(`/api/geocode?${params.toString()}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const payload = await response.json();
+      if (response.ok && payload?.success && payload?.data) {
+        const coords = payload.data as Coordinates;
+        geocodePendingRef.current.delete(trimmed);
+        geocodeFailureRef.current.delete(trimmed);
+        console.info("[TripMap] REST 地理编码成功", { location: trimmed, coords });
+        return coords;
+      }
+      geocodeFailureRef.current.add(trimmed);
+      console.info("[TripMap] REST 地理编码失败", {
+        location: trimmed,
+        error: payload?.error ?? response.statusText,
+      });
+      return null;
+    } catch (error) {
+      geocodeFailureRef.current.add(trimmed);
+      console.warn("[TripMap] REST 地理编码调用异常", { location: trimmed, error });
       return null;
     }
+  }
+
+  function buildGeocodeCandidates(location: string, city?: string | null) {
+    const candidates = new Set<string>();
+    const segments = extractLocationSegments(location);
+    const hint = city?.trim()?.replace(/\s+/g, " ") ?? null;
+
+    segments.forEach((segment) => {
+      if (segment) {
+        candidates.add(segment);
+      }
+    });
+
+    if (hint) {
+      segments.forEach((segment) => {
+        if (!segment) return;
+        const combos = [
+          `${hint}${segment}`,
+          `${segment}${hint}`,
+          `${hint} ${segment}`,
+          `${segment} ${hint}`,
+        ];
+        combos.forEach((item) => {
+          const normalized = item.replace(/\s+/g, " ").trim();
+          if (normalized) {
+            candidates.add(normalized);
+          }
+        });
+      });
+    }
+
+    return Array.from(candidates);
+  }
+
+  function extractLocationSegments(raw: string) {
+    const normalized = raw.replace(/\s+/g, " ").trim();
+    const segments = new Set<string>();
+    if (normalized) {
+      segments.add(normalized);
+    }
+
+    const stripped = normalized
+      .replace(/（.*?）|\(.*?\)/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (stripped) {
+      segments.add(stripped);
+    }
+
+    const parentheticalMatches = normalized.match(/（([^）]+)）|\(([^)]+)\)/g);
+    if (parentheticalMatches) {
+      parentheticalMatches.forEach((match) => {
+        const content = match.replace(/[（）()]/g, "");
+        content
+          .split(/[\/、,，\s]+/)
+          .map((item) => item.replace(/^(建议|推荐|靠近|附近)/g, "").trim())
+          .filter((item) => item.length > 1)
+          .forEach((item) => segments.add(item));
+      });
+    }
+
+    return Array.from(segments);
   }
 }
 

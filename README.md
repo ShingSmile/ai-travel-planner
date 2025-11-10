@@ -9,7 +9,7 @@
 - 🧠 **智能行程生成**：调用阿里云百炼（或兼容 OpenAI API 的模型）输出结构化行程、预算及提示信息。
 - 📅 **行程管理**：记录每日活动、交通、备注，可随时编辑、删除、重新生成；「我的行程」列表支持状态筛选与搜索。
 - 💰 **预算 & 费用**：支持 LLM 预算拆分、手动新增费用、预算阈值提醒。
-- 🗺️ **地图联动**：高德地图展示每日线路，活动卡片与地图点位双向高亮。
+- 🗺️ **地图联动**：高德地图展示每日线路，活动卡片与地图点位双向高亮，并通过真实路线规划替代直线连线。
 - 🎙️ **语音辅助**：内置语音录制组件，可上传识别结果回填表单或自动生成费用草稿。
 - 🔁 **实时同步 & 通知**：Supabase Realtime 推送行程/费用变更；预算超支、行程开始等事件触发提醒。
 - 📦 **部署友好**：提供多阶段 Dockerfile、`docker-compose` 与 GitHub Actions CI/CD。
@@ -78,25 +78,34 @@ npm run dev
 
 完整示例见 `.env.example`。常用键位说明如下：
 
-| 变量                                                              | 说明                               | 备注                                                 |
-| ----------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------- |
-| `SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL`                       | Supabase 项目 URL                  | 本地默认为 `http://127.0.0.1:54321`                  |
-| `SUPABASE_SERVICE_ROLE_KEY`                                       | 服务端密钥                         | 仅后端使用，务必避免泄露                             |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`                                   | 前端匿名密钥                       | 一级权限，仍需安全存储                               |
-| `SUPABASE_JWT_SECRET`                                             | Supabase JWT 签名用 secret         | 与 Supabase 项目保持一致                             |
-| `BAILIAN_API_KEY` / `BAILIAN_MODEL`                               | 大模型访问凭证                     | 兼容 OpenAI 格式                                     |
-| `NEXT_PUBLIC_AMAP_KEY` / `AMAP_REST_KEY`                          | 高德 JS SDK 与 Web 服务密钥        | 前端需配置 Referer 白名单                            |
-| `VOICE_RECOGNIZER_PROVIDER`                                       | 语音识别提供商                     | 默认 `mock`，可切换 `iflytek`/`openai`               |
-| `IFLYTEK_APP_ID` / `IFLYTEK_API_KEY` / `IFLYTEK_API_SECRET`       | 讯飞语音听写凭证（流式 WebSocket） | `VOICE_RECOGNIZER_PROVIDER=iflytek` 时必填           |
-| `IFLYTEK_API_BASE_URL` / `IFLYTEK_DOMAIN` / `IFLYTEK_LANGUAGE` 等 | 讯飞流式参数（可选）               | 默认 `wss://iat-api.xfyun.cn/v2/iat`、`iat`、`zh_cn` |
-| `VOICE_RECOGNIZER_TIMEOUT_MS`                                     | 语音识别超时时间（毫秒）           | 默认 `45000`                                         |
-| `VOICE_RECOGNIZER_MOCK_TRANSCRIPT`                                | Mock 识别返回文本                  | 本地快速演示可填写                                   |
-| `OPENAI_API_KEY` / `OPENAI_VOICE_MODEL`                           | OpenAI 语音识别凭证与模型          | 例：`gpt-4o-mini-transcribe`                         |
-| `NEXT_PUBLIC_TRIP_INTENT_ANALYTICS_ENDPOINT`                      | 行程意图解析埋点上报地址           | 可选，若留空则仅在前端控制台缓存事件                 |
-| `SMTP_HOST` 等                                                    | 邮件通知配置                       | 启用预算提醒或行程提醒时必填                         |
-| `GLOBAL_API_RATE_LIMIT_*`                                         | 全局限流参数                       | 毫秒窗口 & 最大次数，可在生产调优                    |
+| 变量                                                              | 说明                               | 备注                                                                              |
+| ----------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------- |
+| `SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL`                       | Supabase 项目 URL                  | 本地默认为 `http://127.0.0.1:54321`                                               |
+| `SUPABASE_SERVICE_ROLE_KEY`                                       | 服务端密钥                         | 仅后端使用，务必避免泄露                                                          |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`                                   | 前端匿名密钥                       | 一级权限，仍需安全存储                                                            |
+| `SUPABASE_JWT_SECRET`                                             | Supabase JWT 签名用 secret         | 与 Supabase 项目保持一致                                                          |
+| `LLM_PROVIDER`                                                    | LLM 客户端模式                     | `bailian`（默认）或 `openai`（兼容 OpenAI/百炼）                                  |
+| `BAILIAN_API_KEY` / `BAILIAN_MODEL`                               | 大模型访问凭证                     | `LLM_PROVIDER=openai` 时可复用 `OPENAI_API_KEY`                                   |
+| `BAILIAN_API_BASE_URL`                                            | LLM 服务地址                       | 默认原生接口；兼容模式可填 `.../compatible-mode/v1`（无需加 `/chat/completions`） |
+| `LLM_ENABLE_NORMALIZATION_FALLBACKS`                              | 是否启用行程兜底逻辑               | 默认关闭以保留模型原始输出；设为 `true/1/yes` 可恢复旧的占位数据                  |
+| `LLM_DEBUG_STRUCTURED_OUTPUT`                                     | 输出 LLM 原始/归一化调试信息       | 设为 `true/1/yes` 后会在服务端日志打印，便于定位 Schema 失败                      |
+| `NEXT_PUBLIC_AMAP_KEY` / `AMAP_REST_KEY`                          | 高德 JS SDK 与 Web 服务密钥        | 前端需配置 Referer 白名单                                                         |
+| `VOICE_RECOGNIZER_PROVIDER`                                       | 语音识别提供商                     | 默认 `mock`，可切换 `iflytek`/`openai`                                            |
+| `IFLYTEK_APP_ID` / `IFLYTEK_API_KEY` / `IFLYTEK_API_SECRET`       | 讯飞语音听写凭证（流式 WebSocket） | `VOICE_RECOGNIZER_PROVIDER=iflytek` 时必填                                        |
+| `IFLYTEK_API_BASE_URL` / `IFLYTEK_DOMAIN` / `IFLYTEK_LANGUAGE` 等 | 讯飞流式参数（可选）               | 默认 `wss://iat-api.xfyun.cn/v2/iat`、`iat`、`zh_cn`                              |
+| `VOICE_RECOGNIZER_TIMEOUT_MS`                                     | 语音识别超时时间（毫秒）           | 默认 `45000`                                                                      |
+| `VOICE_RECOGNIZER_MOCK_TRANSCRIPT`                                | Mock 识别返回文本                  | 本地快速演示可填写                                                                |
+| `OPENAI_API_KEY` / `OPENAI_VOICE_MODEL`                           | OpenAI 语音识别凭证与模型          | 例：`gpt-4o-mini-transcribe`                                                      |
+| `NEXT_PUBLIC_TRIP_INTENT_ANALYTICS_ENDPOINT`                      | 行程意图解析埋点上报地址           | 可选，若留空则仅在前端控制台缓存事件                                              |
+| `SMTP_HOST` 等                                                    | 邮件通知配置                       | 启用预算提醒或行程提醒时必填                                                      |
+| `GLOBAL_API_RATE_LIMIT_*`                                         | 全局限流参数                       | 毫秒窗口 & 最大次数，可在生产调优                                                 |
 
 更多字段（如 NextAuth、Playwright 绕过凭证）可参考 `.env.example` 注释。
+
+### LLM 输出映射提示
+
+- 后端会尝试把模型返回的 `dailyItinerary` / `dailyPlans` / `itinerary` 字段映射为 Schema 所需的 `days`，并把 `budgetBreakdown`、`totalEstimatedCostCNY` 等整理进 `budget`。
+- 仍请在提示词中严格使用 Schema 中的字段名，避免输出额外键导致 JSON 校验失败；可以开启 `LLM_DEBUG_STRUCTURED_OUTPUT` 观察模型原始回包。
 
 当 `VOICE_RECOGNIZER_PROVIDER` 设置为 `iflytek` 时，请填写 `IFLYTEK_APP_ID`、`IFLYTEK_API_KEY`、`IFLYTEK_API_SECRET` 并确保已在讯飞控制台开通“语音听写·流式 WebSocket”接口；如需自定义识别领域或语种，可通过 `IFLYTEK_DOMAIN`（默认 `iat`）、`IFLYTEK_LANGUAGE`、`IFLYTEK_ACCENT`、`IFLYTEK_VAD_EOS` 等参数调整。需要备用方案时，可将 Provider 切换为 `openai`，并配置对应的 `OPENAI_API_KEY`/`OPENAI_VOICE_MODEL`；演示场景可使用 `mock` 并通过 `VOICE_RECOGNIZER_MOCK_TRANSCRIPT` 返回固定文本。
 
@@ -191,7 +200,7 @@ docker compose up --build
    检查 `.env.local` 是否配置 `NEXT_PUBLIC_SUPABASE_URL` 与 `NEXT_PUBLIC_SUPABASE_ANON_KEY`。
 
 2. **LLM 调用失败？**  
-   查看服务器日志，确认 `BAILIAN_API_KEY`、模型名称及网络连通性。
+   查看服务器日志，确认 `BAILIAN_API_KEY`/`OPENAI_API_KEY`、模型名称、`LLM_PROVIDER` 与 `BAILIAN_API_BASE_URL` 是否匹配；若使用 `https://dashscope.aliyuncs.com/compatible-mode/v1` 或其他 OpenAI 兼容网关，只需把基址填到 `/v1` 并设定 `LLM_PROVIDER=openai`，后端会自动补上 `/chat/completions`。
 
 3. **地图不显示？**  
    确认高德 Key 已添加当前域名至 Referer 白名单，且 JS SDK 正常加载。
@@ -201,4 +210,4 @@ docker compose up --build
 
 ---
 
-如需更多实现细节、业务上下文或迭代记录，请参阅 `docs/AI旅行规划师项目实现指南.md`。欢迎提交 Issue 或 PR，共同完善项目。\*\*\* End Patch
+如需更多实现细节、业务上下文或迭代记录，请参阅 `docs/AI旅行规划师项目实现指南.md`。欢迎提交 Issue 或 PR，共同完善项目。

@@ -141,15 +141,19 @@
 > - `VOICE_RECOGNIZER_PROVIDER=mock` 时，可通过 `VOICE_RECOGNIZER_MOCK_TRANSCRIPT` 设置固定演示文案。
 
 ## 10. 地图与路线
-- 引入高德 JS SDK，配置安全密钥与 referer 白名单
-- 组件：
-  - 行程概览地图：展示所有活动点位与行程线路
-  - 单日地图：按时间顺序绘制路线
+- 引入高德 JS SDK，配置安全密钥与 referer 白名单。前端 `TripMap` 组件会根据活动坐标生成 Marker，缺失点位时会优先读取 `details.latitude/longitude`，再回退到 JS SDK 地理编码与服务端 `/api/geocode`。
+- 组件职责：
+  - 行程概览地图：展示所有活动点位与真实路线
+  - 单日地图：按时间顺序动态绘制路线，支持活动卡片 ↔ 地图点位联动
   - POI 详情卡片：展示地址、营业时间、评分、照片
 - 后端调用高德 Web 服务：
-  - POI 搜索（`/place/text`）匹配 LLM 返回的地点
-  - 路线规划（`/direction/driving` 等）获取交通时长
-- 缓存策略：使用 Supabase Edge Functions 或 Redis 缓存热门地点
+  - POI 搜索（`/place/text`）匹配 LLM 返回的地点，并写入 `activities.details.latitude/longitude`
+  - 地理编码（`/v3/geocode/geo`）为纯文本地点提供坐标
+  - 路线规划：新增 `/api/directions` 代理 `https://restapi.amap.com/v5/direction/{driving,walking,cycling}`，输出 polyline。前端按活动间两两请求真实路线，不再使用直线连线。
+- 缓存策略：
+  - 服务端对 POI/路线可结合 Supabase Edge Functions 或 Redis 做持久缓存
+  - 前端 `TripMap` 内部以 `Map` 形式缓存 geocode 与路线结果，避免同页多次请求
+  - 若路线接口失败，自动降级为两点之间的直线，保证地图元素始终可见
 
 ## 11. 前端页面与组件规划
 - `/(landing)`：产品介绍、主要卖点
@@ -174,6 +178,7 @@
 | `POST` | `/api/expenses` | 新增费用 |
 | `GET` | `/api/expenses?tripId=` | 获取费用列表 |
 | `POST` | `/api/llm/generate` | 手动触发行程生成（如重新规划） |
+| `GET` | `/api/directions?origin=lng,lat&destination=lng,lat&mode=driving` | 调用高德路线规划，返回 polyline，前端用来绘制真实路径 |
 
 - 使用 JWT/Session 验证用户身份。
 - 对 AI 调用设置速率限制（Supabase Edge Functions + Redis）。
